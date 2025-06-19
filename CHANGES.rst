@@ -17,10 +17,21 @@ New Features
 
 - User API access to ``simplify_subset()`` method in the Subset Tools plugin. [#3601]
 
+- Hitting the "Enter" key while changing a value in the Subset Tools plugin will make a call to accept the changes (equivalent to clicking the "Update" button). [#3600]
+
+- Hitting the "Enter" key while renaming a subset or footprint will accept the changes, hitting "Escape" will cancel. [#3600]
+
+- Added subset_label keyword argument to ``import_region`` method of Subset Tools plugin
+  to name the resulting subset(s). [#3616]
+
+- Aperture Photometry public API exposed, added API hints to plugin. [#3617]
+
 Cubeviz
 ^^^^^^^
 
 - Ability to ingest and export ``SkyRegion`` objects. [#3502]
+
+- Add sonified layer for each cube created by the Sonify Data plugin. [#3430]
 
 Imviz
 ^^^^^
@@ -55,6 +66,8 @@ Specviz2d
 
 - Loading data is now done through the loaders menu in the right sidebar.  The "import data" button is
   deprecated and will open the new sidebar.  [#3473]
+
+- New plugin to vizualize the cross-dispersion profile [#3552]
 
 API Changes
 -----------
@@ -124,7 +137,39 @@ Other Changes and Additions
   dependencies installed with the ``[all]`` extra dependencies flag
   (i.e., ``pip install jdaviz[all]``). [#3556]
 
-4.2.3 (unreleased)
+4.2.4 (unreleased)
+==================
+
+Bug Fixes
+---------
+
+- Improve performance when adding/removing subsets by avoiding circular callbacks. [#3628]
+
+Cubeviz
+^^^^^^^
+
+- Significantly improved the performance of Cubeviz when creating several subsets in the
+  image viewer. [#3626]
+
+- Broadcast snackbar message to user when sonification of a data cube completes. [#3647]
+
+Imviz
+^^^^^
+
+- Fix dropdowns for overlay not showing in UI. [#3640]
+
+- Prevent image wrapping in Imviz with Roman L2 images with GWCS. [#2887]
+
+Mosviz
+^^^^^^
+
+Specviz
+^^^^^^^
+
+Specviz2d
+^^^^^^^^^
+
+4.2.3 (2025-06-16)
 ==================
 
 Bug Fixes
@@ -138,6 +183,8 @@ Bug Fixes
 
 - Pinned specutils<2.0 until our compatibility fix is merged. [#3605]
 
+- Hide rename button in editable dropdowns in multiselect mode. [#3623]
+
 Cubeviz
 ^^^^^^^
 
@@ -146,17 +193,10 @@ Cubeviz
 
 - Broadcast snackbar message to user when Collapse plugin fails to perform the collapse. [#3604]
 
-Imviz
-^^^^^
+Other changes and Additions
+---------------------------
 
-Mosviz
-^^^^^^
-
-Specviz
-^^^^^^^
-
-Specviz2d
-^^^^^^^^^
+- Updated minimum version of echo to 0.11, as it significantly improves the performance of CubeViz. [#3627]
 
 4.2.2 (2025-05-12)
 ==================
