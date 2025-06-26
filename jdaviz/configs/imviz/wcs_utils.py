@@ -431,7 +431,7 @@ def _prepare_rotated_nddata(real_image_shape, wcs, rotation_angle, refdata_shape
     ndd = NDData(
         data=placeholder_data,
         wcs=new_rotated_wcs,
-        meta={wcs_only_key: True, '_pixel_scales': pixel_scales}
+        meta={wcs_only_key: True, '_pixel_scales': pixel_scales, 'plugin': 'orientation'}
     )
     return ndd
 
@@ -551,6 +551,12 @@ def compute_scale(wcs, fiducial, disp_axis, pscale_ratio=1):
 
     if spectral and disp_axis is None:  # pragma: no cover
         raise ValueError('If input WCS is spectral, a disp_axis must be given')
+
+    # gwcs will not interally strip units off input if the forward transform
+    # does not use quantities, so they must be removed before checking if points
+    # are in image and computing the inverse
+    if not wcs.forward_transform.uses_quantity and hasattr(fiducial, 'value'):
+        fiducial = fiducial.value
 
     if wcs.in_image(*fiducial):
         crpix = np.array(wcs.invert(*fiducial))

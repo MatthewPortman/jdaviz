@@ -139,6 +139,8 @@ Other Changes and Additions
   dependencies installed with the ``[all]`` extra dependencies flag
   (i.e., ``pip install jdaviz[all]``). [#3556]
 
+- Auto-update sonification label upon adding sonification to viewer. [#3430, #3656]
+
 4.2.4 (unreleased)
 ==================
 
@@ -146,6 +148,10 @@ Bug Fixes
 ---------
 
 - Improve performance when adding/removing subsets by avoiding circular callbacks. [#3628]
+
+- Fixed issue in ``compute_scale`` to handle the case when the wcs forward
+  transform does not use units, which was previously causing issues when
+  aligning by WCS. [#3658]
 
 Cubeviz
 ^^^^^^^
@@ -161,6 +167,8 @@ Imviz
 - Fix dropdowns for overlay not showing in UI. [#3640]
 
 - Prevent image wrapping in Imviz with Roman L2 images with GWCS. [#2887]
+
+- Fix get_zoom_limits when WCS linked and out of image bounds. [#3654]
 
 Mosviz
 ^^^^^^
