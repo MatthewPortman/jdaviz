@@ -33,7 +33,7 @@ Cubeviz
 
 - Ability to ingest and export ``SkyRegion`` objects. [#3502]
 
-- Add sonified layer for each cube created by the Sonify Data plugin. [#3430]
+- Add sonified layer for each cube created by the Sonify Data plugin. [#3430, #3660]
 
 Imviz
 ^^^^^
@@ -149,6 +149,8 @@ Bug Fixes
 
 - Improve performance when adding/removing subsets by avoiding circular callbacks. [#3628]
 
+- Disable export and raise vue error message upon selection of unsupported subset format. [#3635]
+
 - Fixed issue in ``compute_scale`` to handle the case when the wcs forward
   transform does not use units, which was previously causing issues when
   aligning by WCS. [#3658]
@@ -178,6 +180,9 @@ Specviz
 
 Specviz2d
 ^^^^^^^^^
+
+- Fixed an issue with default angle unit being set in unit conversion plugin, which fixed
+  a bug when background data from the spectral extraction plugin is added to the viewer. [#3661]
 
 4.2.3 (2025-06-16)
 ==================
