@@ -1191,8 +1191,7 @@ class SimpleAperturePhotometry(PluginTemplateMixin, ApertureSubsetSelectMixin,
                 raise ValueError("must either provide a dictionary or set plugin to multiselect mode")  # noqa
             options = {'dataset': self.dataset.selected, 'aperture': self.aperture.selected}
 
-        # TODO: use self.user_api once API is made public
-        user_api = self  # .user_api
+        user_api = self.user_api
         invalid_keys = [k for k in options.keys() if not hasattr(user_api, k)]
         if len(invalid_keys):
             raise ValueError(f"{invalid_keys} are not valid inputs for batch photometry")
