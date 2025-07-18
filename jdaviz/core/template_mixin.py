@@ -3954,18 +3954,22 @@ class DatasetSelect(SelectPluginComponent):
         def is_cube(data):
             return len(data.shape) == 3
 
-        def is_cube_or_image(data):
-            return len(data.shape) >= 2
-
         def is_spectrum(data):
             return (len(data.shape) == 1
                     and data.coords is not None
                     and getattr(data.coords, 'is_spectral', True))
 
-        def is_2d_spectrum_or_trace(data):
+        def is_2d_spectrum(data):
             return (data.ndim == 2
                     and data.coords is not None
-                    and getattr(data.coords, 'has_spectral', True)) or 'Trace' in data.meta
+                    and getattr(data.coords, 'has_spectral', True))
+
+        def is_2d_spectrum_or_trace(data):
+            return is_2d_spectrum(data) or is_trace(data)
+
+        def is_cube_or_image_not_2d_spectrum(data):
+            return (len(data.shape) >= 2
+                    and not is_2d_spectrum(data))
 
         def is_spectrum_or_cube(data):
             return is_spectrum(data) or is_cube(data)
