@@ -69,7 +69,9 @@ class CubevizImageView(JdavizViewerMixin, WithSliceSelection, BqplotImageView):
         self.sonification_wl_unit = None
         self.volume_level = None
 
-        self.data_menu._obj.dataset.add_filter('is_cube_or_image')
+        # TODO: would it be better to more legible to stack single filters
+        #  than to compose multi-filters?
+        self.data_menu._obj.dataset.add_filter('is_cube_or_image_not_2d_spectrum')
 
         # Dictionary that contains keys with UUIDs for each
         # sonified data layer. The value of each key is another dictionary containing
