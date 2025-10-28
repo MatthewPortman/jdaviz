@@ -18,8 +18,7 @@ from jdaviz.core.registries import (loader_resolver_registry,
                                     loader_parser_registry,
                                     loader_importer_registry)
 from jdaviz.core.user_api import LoaderUserApi
-from jdaviz.utils import (download_uri_to_path, return_rss,
-                          diff_mem_usage_decorator, MemoryUsageContext)
+from jdaviz.utils import (download_uri_to_path, diff_mem_usage_decorator, MemoryUsageContext)
 
 __all__ = ['BaseResolver', 'find_matching_resolver']
 
