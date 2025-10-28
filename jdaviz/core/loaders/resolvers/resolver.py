@@ -18,7 +18,8 @@ from jdaviz.core.registries import (loader_resolver_registry,
                                     loader_parser_registry,
                                     loader_importer_registry)
 from jdaviz.core.user_api import LoaderUserApi
-from jdaviz.utils import download_uri_to_path
+from jdaviz.utils import (download_uri_to_path, return_rss,
+                          diff_mem_usage_decorator, MemoryUsageContext)
 
 __all__ = ['BaseResolver', 'find_matching_resolver']
 
@@ -86,7 +87,8 @@ class FormatSelect(SelectPluginComponent):
                     self._dbg_parsers[parser_name] = this_parser
                 try:
                     if this_parser.is_valid:
-                        importer_input = this_parser.output
+                        with MemoryUsageContext(label=f'Parser {parser_name}'):
+                            importer_input = this_parser.output
                     else:
                         self._invalid_importers[parser_name] = 'not valid'
                         importer_input = None
@@ -100,9 +102,11 @@ class FormatSelect(SelectPluginComponent):
                 for importer_name, Importer in loader_importer_registry.members.items():
                     label = f"{parser_name} > {importer_name}"
                     try:
-                        this_importer = Importer(app=self.plugin.app,
-                                                 resolver=self.plugin,
-                                                 input=importer_input)
+                        with MemoryUsageContext(label=f'{label} init'):  # , with_tracemalloc=True):
+                            this_importer = Importer(app=self.plugin.app,
+                                                     resolver=self.plugin,
+                                                     parser=this_parser,
+                                                     input=importer_input)
                     except Exception as e:  # nosec
                         self._invalid_importers[label] = f'importer exception: {e}'
                         continue
@@ -147,7 +151,8 @@ class FormatSelect(SelectPluginComponent):
                         self._invalid_importers[label] = 'not valid'
 
         self.items = all_resolvers
-        self._apply_default_selection()
+        with MemoryUsageContext(label='Apply default selection'):
+            self._apply_default_selection()
 
 
 class TargetSelect(SelectPluginComponent):
@@ -379,6 +384,18 @@ class BaseResolver(PluginTemplateMixin):
                 return parsed_input_table
         return None
 
+    def _cleanup(self):
+        # clear the existing cache and close any open file references
+        # from referenced parsers/importers
+        for parser in self.format._parsers.values():
+            with MemoryUsageContext(label=f'Parser {parser} cleanup'):
+                parser._cleanup()
+        for importer in self.format._importers.values():
+            if hasattr(importer, '_cleanup'):
+                with MemoryUsageContext(label=f'Importer {importer} cleanup'):
+                    importer._cleanup()
+        self._clear_cache('parsed_input', 'output')
+
     @observe('parsed_input_is_query', 'treat_table_as_query')
     @with_spinner('spinner', 'parsing input...')
     def _resolver_input_updated(self, msg={}):
@@ -528,11 +545,13 @@ class BaseResolver(PluginTemplateMixin):
             raise ValueError("must select a format before accessing importer")
         return self.format._importers[self.format.selected]
 
+    @diff_mem_usage_decorator(label="Loader: load")
     def load(self):
         """
         Import into jdaviz with all selected options.
         """
-        return self.importer()
+        out = self.importer()
+        return out
 
     @observe('target_selected')
     def _on_target_selected_changed(self, change={}):
