@@ -432,7 +432,8 @@ class MOSImporter(BaseImporterToDataCollection, LoaderBannerMessagesMixin):
         """
         filename = file_info['path'].name
         product_type = file_info['product_type']
-        data_label = f"{data_label_prefix}_{file_info['suffix']}"
+        data_label = f"{data_label_prefix}_{file_info['suffix']}" \
+            if data_label_prefix else file_info['suffix']
         kwargs = {}
         if product_type == 'spectrum2d':
             # MOS products are expected to provide their own 1D spectra, so
