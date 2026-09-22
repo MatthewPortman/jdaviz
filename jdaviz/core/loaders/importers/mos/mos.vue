@@ -32,7 +32,7 @@
             style="margin: 4px"
           >
             <v-icon v-if="data_label_overwrite_by_index[index]" small left color="warning">mdi-file-replace</v-icon>
-            {{data_label_value}}{{suff}}
+            {{data_label_value}}<span v-if="data_label_value">_</span>{{suff}}
           </v-chip>
         </j-tooltip>
     </j-flex-row>
