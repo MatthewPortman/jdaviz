@@ -139,3 +139,18 @@ def test_init_slice(deconfigged_helper, spectrum1d_cube):
     assert sl.value == slice_values[1]
     assert fv.slice == 1
     assert fv.state.slices == (1, 0, 0)
+
+
+def test_spectral_slice_cache_cleared_on_data_removed(deconfigged_helper, spectrum1d_cube):
+    # in deconfigged, SpectralSlice also updates its relevance on data removal, which must
+    # not replace the base class cache clearing.
+    deconfigged_helper.load(spectrum1d_cube, format='3D Spectrum', data_label='cube')
+    app = deconfigged_helper._app
+    sl = deconfigged_helper.plugins['Spectral Slice']._obj
+    _ = sl.valid_selection_values
+    assert 'valid_selection_values' in sl.__dict__
+
+    viewer = next(v for v in app._viewer_store.values()
+                  if 'cube' in [layer.layer.label for layer in v.layers])
+    app.remove_data_from_viewer(viewer.reference, 'cube')
+    assert 'valid_selection_values' not in sl.__dict__

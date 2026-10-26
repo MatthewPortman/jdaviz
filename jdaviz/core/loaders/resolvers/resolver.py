@@ -1163,14 +1163,6 @@ class BaseConeSearchResolver(BaseResolver, LoaderBannerMessagesMixin):
                 for d in self._app.data_collection
             )
         )
-        # NOTE: ViewerRemovedMessage is handled by _on_viewer_removed
-        # TODO: Investigate these other messages to see if they should be approached
-        #  similarly
-        for message in (ViewerAddedMessage,
-                        DataCollectionAddMessage, DataCollectionDeleteMessage):
-            self.hub.subscribe(self, message,
-                               handler=lambda lambda_msg=None: self.search_input._update_items())  # noqa
-
         self.viewer = ViewerSelect(
             self, "viewer_items", "viewer_selected", filters=['is_image_viewer']
         )
@@ -1217,9 +1209,11 @@ class BaseConeSearchResolver(BaseResolver, LoaderBannerMessagesMixin):
         self.radius_unit.choices = ["deg", "rad", "arcmin", "arcsec"]
         self.radius_unit.selected = "deg"
 
-        self.hub.subscribe(self, AddDataMessage, handler=self.vue_center_on_data)
+        # NOTE: ViewerAddedMessage, ViewerRemovedMessage, AddDataMessage,
+        # DataCollectionAddMessage, DataCollectionDeleteMessage and LinkUpdatedMessage are
+        # subscribed in the base classes, so override their handlers instead of subscribing
+        # here (glue's hub only keeps one handler per subscriber and message class).
         self.hub.subscribe(self, RemoveDataMessage, handler=self.vue_center_on_data)
-        self.hub.subscribe(self, LinkUpdatedMessage, handler=self._on_link_type_updated)
 
     @property
     def _query_archive_label(self):
@@ -1339,9 +1333,25 @@ class BaseConeSearchResolver(BaseResolver, LoaderBannerMessagesMixin):
     def parse_input(self):
         return self._output
 
+    def _on_viewer_added(self, msg):
+        super()._on_viewer_added(msg)
+        self.search_input._update_items()
+
     def _on_viewer_removed(self, msg):
         super()._on_viewer_removed(msg)
         self.search_input._update_items()
+
+    def _on_collection_data_added(self, msg):
+        super()._on_collection_data_added(msg)
+        self.search_input._update_items()
+
+    def _on_data_removed(self, msg):
+        super()._on_data_removed(msg)
+        self.search_input._update_items()
+
+    def _on_viewer_data_added(self, msg):
+        super()._on_viewer_data_added(msg)
+        self.vue_center_on_data()
 
     @observe('catalog_selected')
     def _on_catalog_selected(self, msg=None):

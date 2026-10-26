@@ -237,10 +237,13 @@ class BaseImporterToDataCollection(BaseImporter):
                                             multiselect='viewer_multiselect',
                                             default_mode='empty')
 
+        # NOTE: subclasses should override _on_data_collection_changed rather than
+        # subscribing to these messages, since glue's hub only keeps one handler per
+        # subscriber and message class.
         self.hub.subscribe(self, DataCollectionAddMessage,
-                           handler=lambda _: self._on_label_changed())
+                           handler=self._on_data_collection_changed)
         self.hub.subscribe(self, DataCollectionDeleteMessage,
-                           handler=lambda _: self._on_label_changed())
+                           handler=self._on_data_collection_changed)
         self._on_label_changed()
 
         supported_viewers = self._get_supported_viewers()
@@ -291,6 +294,9 @@ class BaseImporterToDataCollection(BaseImporter):
                 for choice in self.viewer.create_new.choices]
 
     @observe('data_label_value', 'data_label_is_prefix', 'data_label_suffices')
+    def _on_data_collection_changed(self, msg=None):
+        self._on_label_changed()
+
     def _on_label_changed(self, msg={}):
         if not len(self.data_label_value.strip()):
             # strip will raise the same error for a label of all spaces

@@ -3,7 +3,6 @@ from traitlets import Any, Bool, List, Unicode, observe
 from astropy import units as u
 from astropy.nddata import StdDevUncertainty
 from specutils import Spectrum
-from glue.core.message import DataCollectionAddMessage, DataCollectionDeleteMessage
 
 from jdaviz.core.custom_units_and_equivs import PIX2
 from jdaviz.core.events import SnackbarMessage
@@ -118,12 +117,6 @@ class Spectrum3DImporter(BaseImporterToDataCollection, SpectrumInputExtensionsMi
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-
-        # Subscribe to data collection changes to update import disabled state
-        self.hub.subscribe(self, DataCollectionAddMessage,
-                           handler=lambda _: self._check_flux_cube_loaded())
-        self.hub.subscribe(self, DataCollectionDeleteMessage,
-                           handler=lambda _: self._check_flux_cube_loaded())
 
         # Check initially if a flux cube already exists
         self._check_flux_cube_loaded()
@@ -282,6 +275,10 @@ class Spectrum3DImporter(BaseImporterToDataCollection, SpectrumInputExtensionsMi
 
         # Initialize dq_add_to_flux_viewer based on whether a flux viewer is selected
         self._update_dq_add_to_flux_viewer()
+
+    def _on_data_collection_changed(self, msg=None):
+        super()._on_data_collection_changed(msg)
+        self._check_flux_cube_loaded()
 
     def _check_flux_cube_loaded(self):
         """

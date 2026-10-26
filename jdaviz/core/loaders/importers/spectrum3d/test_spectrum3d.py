@@ -16,3 +16,18 @@ def test_spectrum3d_importer_is_valid(deconfigged_helper, spectrum1d, spectrum1d
     if 'spectra' in importer.__dict__:
         del importer.__dict__['spectra']
     assert importer._check_is_valid() == 'Spectrum flux must be 3D.'
+
+
+def test_spectrum3d_importer_label_overwrite_updates(deconfigged_helper, spectrum1d,
+                                                     spectrum1d_cube):
+    # Spectrum3DImporter also checks for an existing flux cube on data collection changes,
+    # which must not replace the base class data label validation.
+    ldr = deconfigged_helper.loaders['object']
+    ldr.object = spectrum1d_cube
+    ldr.format = '3D Spectrum'
+    ldr.importer.data_label = 'shared'
+    importer = ldr.importer._obj
+    assert importer.data_label_overwrite is False
+
+    deconfigged_helper.load(spectrum1d, format='1D Spectrum', data_label='shared')
+    assert importer.data_label_overwrite is True

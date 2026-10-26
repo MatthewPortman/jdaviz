@@ -96,7 +96,7 @@ class BaseSlicePlugin(PluginTemplateMixin, ViewerSelectMixin):
         self.hub.subscribe(self, AddDataMessage,
                            handler=self._on_add_data)
         self.hub.subscribe(self, RemoveDataMessage,
-                           handler=lambda _: self._clear_cache())
+                           handler=self._on_remove_data)
 
         # connect any pre-existing viewers
         for viewer in self._app._viewer_store.values():
@@ -232,6 +232,9 @@ class BaseSlicePlugin(PluginTemplateMixin, ViewerSelectMixin):
         # subscribed to ViewerRemovedMessage
         super()._on_viewer_removed(msg)
         self._check_if_cube_viewer_exists()
+
+    def _on_remove_data(self, msg):
+        self._clear_cache()
 
     def _on_add_data(self, msg):
         self._check_if_cube_viewer_exists()
@@ -436,8 +439,6 @@ class SpectralSlice(BaseSlicePlugin):
         self.allow_disable_snapping = False
 
         self.viewer.add_filter(lambda viewer: isinstance(viewer, (CubevizImageView, CubevizProfileView)))  # noqa
-        if self.config == 'deconfigged':
-            self.hub.subscribe(self, RemoveDataMessage, handler=self._set_relevant)
         self._set_relevant()
 
     @observe('viewer_items')
@@ -452,6 +453,11 @@ class SpectralSlice(BaseSlicePlugin):
     def _on_add_data(self, msg):
         self._set_relevant()
         super()._on_add_data(msg)
+
+    def _on_remove_data(self, msg):
+        super()._on_remove_data(msg)
+        if self.config == 'deconfigged':
+            self._set_relevant()
 
     def _on_select_slice_message(self, msg):
         # Ignore messages from tools in non-cubeviz viewers (e.g. the time slice tool

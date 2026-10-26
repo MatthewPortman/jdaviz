@@ -882,3 +882,19 @@ class TestIsValid:
 
         with pytest.raises(ValueError, match='No valid loaders found for input.'):
             deconfigged_helper.load('this_file_does_not_exist.fits')
+
+
+@pytest.mark.parametrize('loader', ['astroquery', 'virtual observatory'])
+def test_cone_search_resolver_tracks_image_data(deconfigged_helper, image_nddata_wcs, loader):
+    # cone search resolvers also update their search inputs on data collection changes,
+    # which must not replace the base class image_data_loaded tracking.
+    resolver = deconfigged_helper.loaders[loader]._obj
+    assert resolver.image_data_loaded is False
+
+    deconfigged_helper.load(image_nddata_wcs, format='Image', data_label='img')
+    assert resolver.image_data_loaded is True
+
+    dc = deconfigged_helper._app.data_collection
+    for data in list(dc):
+        dc.remove(data)
+    assert resolver.image_data_loaded is False
