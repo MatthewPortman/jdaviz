@@ -58,17 +58,25 @@
       :items="continuum_subset_items"
       v-model:selected="continuum_subset_selected"
       :show_if_single_entry="true"
-      :rules="[() => continuum_subset_selected!==spectral_subset_selected || 'Must not match line selection.']"
       label="Continuum"
       api_hint="plg.continuum ="
       :api_hints_enabled="api_hints_enabled"
       hint="Select spectral region that defines the continuum."
     />
 
+    <j-flex-row v-if="continuum_subset_selected===spectral_subset_selected">
+      <v-alert type="error" style="width: 100%; margin-left: 12px; margin-right: 12px;">
+        <span class="v-messages v-messages__message text--secondary">
+            Cannot use the same region to define both the spectral line and the continuum.
+        </span>
+      </v-alert>
+    </j-flex-row>
+
     <j-flex-row v-if="continuum_subset_selected=='Surrounding' && spectral_subset_selected!='Entire Spectrum'">
       <!-- DEV NOTE: if changing the validation rules below, also update the logic to clear the results
            in line_analysis.py  -->
       <v-text-field
+        variant="underlined"
         :label="api_hints_enabled ? 'plg.continuum_width =' : 'Width'"
         type="number"
         v-model.number="continuum_width"
@@ -104,6 +112,7 @@
     <j-flex-row>
     <v-switch
         v-model="plot_gaussian_params"
+        color="primary"
         :label="api_hints_enabled ? 'plg.plot_gaussian_params = True' : 'Plot Gaussian'"
         hint="When enabled, plots the Gaussian fit spectrum, and marks the centroid and FWHM."
         persistent-hint
@@ -193,6 +202,7 @@
             </v-col>
             <v-col cols=10>
               <v-select
+                variant="underlined"
                 :menu-props="{ location: 'bottom start' }"
                 attach
                 :items="line_menu_items"
@@ -208,6 +218,7 @@
 
           <j-flex-row v-if="selected_line">
             <v-text-field
+              variant="underlined"
               :model-value='selected_line_redshift'
               class="mt-0 pt-0"
               type="number"

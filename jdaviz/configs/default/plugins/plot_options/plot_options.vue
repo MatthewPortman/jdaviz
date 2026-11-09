@@ -207,6 +207,7 @@
     <div v-if="image_color_mode_sync.in_subscribed_states">
       <glue-state-sync-wrapper :sync="image_color_mode_sync" :multiselect="viewer_multiselect" @unmix-state="unmix_state('image_color_mode')">
         <v-select
+          variant="underlined"
           attach
           :menu-props="{ location: 'bottom start' }"
           :items="image_color_mode_sync.choices"
@@ -246,7 +247,7 @@
           <plugin-action-button
             :spinner="apply_RGB_presets_spinner"
             :results_isolated_to_plugin="false"
-            :class="api_hints_enabled ? 'api-hint' : null"
+            :api_hints_enabled="api_hints_enabled"
             @click="apply_RGB_presets"
           >
             {{ api_hints_enabled ?
@@ -304,6 +305,7 @@
         Jdaviz.  Use the "Visible columns" tool in the table viewer toolbar instead.
       </v-alert>
       <v-select
+        variant="underlined"
         attach
         :menu-props="{ location: 'bottom start' }"
         :items="table_columns_visible_sync.choices"
@@ -330,14 +332,10 @@
     <!-- LAYER OPTIONS -->
     <div v-if="api_hints_enabled">
       <j-flex-row v-if="layer_items.length> 1">
-        <span class="api-hint">
-          plg.layer.multiselect = {{ boolToString(layer_multiselect) }}
-        </span>
+        <j-api-hint>plg.layer.multiselect = {{ boolToString(layer_multiselect) }}</j-api-hint>
       </j-flex-row>
       <j-flex-row>
-        <span class="api-hint">
-          plg.layer = {{ layer_multiselect ? layer_selected : '\''+layer_selected+'\'' }}
-        </span>
+        <j-api-hint>plg.layer = {{ layer_multiselect ? layer_selected : '\''+layer_selected+'\'' }}</j-api-hint>
       </j-flex-row>
     </div>
 
@@ -523,7 +521,7 @@
         <glue-state-sync-wrapper v-if="marker_visible_value" :sync="marker_size_mode_sync" :multiselect="layer_multiselect" @unmix-state="unmix_state('marker_size_mode')">
           <glue-state-select
             :items="marker_size_mode_sync.choices"
-            :selected.syn="marker_size_mode_value"
+            v-model:selected="marker_size_mode_value"
             label="Size Mode"
             api_hint="plg.marker_size_mode = "
             :api_hints_enabled="api_hints_enabled"
@@ -566,6 +564,7 @@
 
         <glue-state-sync-wrapper v-if="marker_visible_value && marker_size_mode_value!=='Fixed'" :sync="marker_size_vmin_sync" :multiselect="layer_multiselect" @unmix-state="unmix_state('marker_size_vmin')">
           <v-text-field
+            variant="underlined"
             ref="marker_size_vmin"
             :label="api_hints_enabled ? 'plg.marker_size_vmin =' : 'vmin'"
             :class="api_hints_enabled ? 'api-hint' : null"
@@ -577,6 +576,7 @@
 
         <glue-state-sync-wrapper v-if="marker_visible_value && marker_size_mode_value!=='Fixed'" :sync="marker_size_vmax_sync" :multiselect="layer_multiselect" @unmix-state="unmix_state('marker_size_vmax')">
           <v-text-field
+            variant="underlined"
             ref="marker_size_vmax"
             :label="api_hints_enabled ? 'plg.marker_size_vmax =' : 'vmax'"
             :class="api_hints_enabled ? 'api-hint' : null"
@@ -629,6 +629,7 @@
 
         <glue-state-sync-wrapper v-if="marker_visible_value && marker_color_mode_value!=='Fixed'" :sync="marker_colormap_vmin_sync" :multiselect="layer_multiselect" @unmix-state="unmix_state('marker_colormap_vmin')">
           <v-text-field
+            variant="underlined"
             ref="marker_colormap_vmin"
             :label="api_hints_enabled ? 'plg.marker_colormap_vmin =' : 'vmin'"
             :class="api_hints_enabled ? 'api-hint' : null"
@@ -640,6 +641,7 @@
 
         <glue-state-sync-wrapper v-if="marker_visible_value && marker_color_mode_value!=='Fixed'" :sync="marker_colormap_vmax_sync" :multiselect="layer_multiselect" @unmix-state="unmix_state('marker_colormap_vmax')">
           <v-text-field
+            variant="underlined"
             ref="marker_colormap_vmax"
             :label="api_hints_enabled ? 'plg.marker_colormap_vmax =' : 'vmax'"
             :class="api_hints_enabled ? 'api-hint' : null"
@@ -739,6 +741,7 @@
       <div v-if="image_visible_sync.in_subscribed_states && (image_visible_value || image_visible_sync['mixed'])">
         <glue-state-sync-wrapper v-if="image_color_mode_value === 'Colormaps' || image_color_mode_sync['mixed']" :sync="image_colormap_sync" :multiselect="layer_multiselect" @unmix-state="unmix_state('image_colormap')">
           <v-select
+            variant="underlined"
             attach
             :menu-props="{ location: 'bottom start' }"
             :items="image_colormap_sync.choices"
@@ -855,6 +858,7 @@
       <!-- for multiselect, show vmin/max here, otherwise they'll be in the "more stretch options" expandable section -->
       <glue-state-sync-wrapper v-if="layer_multiselect" :sync="stretch_vmin_sync" :multiselect="layer_multiselect" @unmix-state="unmix_state('stretch_vmin')">
         <v-text-field
+          variant="underlined"
           ref="stretch_vmin"
           :label="api_hints_enabled ? 'plg.stretch_vmin =' : 'Stretch VMin'"
           :class="api_hints_enabled ? 'api-hint' : null"
@@ -866,6 +870,7 @@
 
       <glue-state-sync-wrapper v-if="layer_multiselect" :sync="stretch_vmax_sync" :multiselect="layer_multiselect" @unmix-state="unmix_state('stretch_vmax')">
         <v-text-field
+          variant="underlined"
           ref="stretch_vmax"
           :label="api_hints_enabled ? 'plg.stretch_vmax =' : 'Stretch VMax'"
           :class="api_hints_enabled ? 'api-hint' : null"
@@ -913,6 +918,7 @@
               <v-expansion-panel-text class="plugin-expansion-panel-content">
                 <j-flex-row>
                   <v-text-field
+                      variant="underlined"
                       ref="stretch_hist_nbins"
                       :label="api_hints_enabled ? 'plg.stretch_hist_nbins =' : 'Number of Bins'"
                       :class="api_hints_enabled ? 'api-hint' : null"
@@ -945,6 +951,7 @@
                 </j-flex-row>
                 <glue-state-sync-wrapper :sync="stretch_vmin_sync" :multiselect="layer_multiselect" @unmix-state="unmix_state('stretch_vmin')">
                   <v-text-field
+                    variant="underlined"
                     ref="stretch_vmin"
                     :label="api_hints_enabled ? 'plg.stretch_vmin =' : 'Stretch VMin'"
                     :class="api_hints_enabled ? 'api-hint' : null"
@@ -955,6 +962,7 @@
                 </glue-state-sync-wrapper>
                 <glue-state-sync-wrapper :sync="stretch_vmax_sync" :multiselect="layer_multiselect" @unmix-state="unmix_state('stretch_vmax')">
                   <v-text-field
+                    variant="underlined"
                     ref="stretch_vmax"
                     :label="api_hints_enabled ? 'plg.stretch_vmax =' : 'Stretch VMax'"
                     :class="api_hints_enabled ? 'api-hint' : null"
@@ -1035,6 +1043,7 @@
             <div v-else>
               <glue-state-sync-wrapper :sync="contour_custom_levels_sync" :multiselect="layer_multiselect" @unmix-state="unmix_state('contour_levels')">
                 <v-text-field
+                  variant="underlined"
                   :label="api_hints_enabled ? 'plg.contour_custom_levels =' : 'Contour Levels'"
                   :class="api_hints_enabled ? 'api-hint' : null"
                   :model-value="contour_custom_levels_txt"

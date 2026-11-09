@@ -8,7 +8,7 @@
     >
       <v-btn class="custom-toolbar-mode-button" @click="restore_tools" style="background-color: #007ba1; color: white; border-bottom-right-radius: 0; border-top-right-radius: 0; margin-right: -6px; padding-top: 3px">
         <j-tooltip :tooltipcontent="`exit '${tool_override_mode}' mode and restore original toolbar`" span_style="height: inherit; display: inherit; pointer-events: cursor;">
-          <v-icon style="margin-left: 4px;">mdi-close</v-icon>
+          <v-icon class="custom-toolbar-mode-cancel" style="margin-left: 4px;">mdi-close</v-icon>
           <span class="custom-toolbar-mode-label" style="color: white; margin-top: 0px; margin-left: 12px">{{ tool_override_mode }}</span>
         </j-tooltip>
       </v-btn>
@@ -41,7 +41,7 @@
             :step="widget.step !== undefined ? widget.step : 0.01"
             density="compact"
             hide-details
-            style="min-width: 140px; max-width: 220px; margin: 16px 4px 0 4px; align-self: flex-start;"
+            style="min-width: 140px; max-width: 220px; margin: 0 4px; align-self: center;"
             class="custom-toolbar-slider"
             color="white"
             track-color="rgba(255,255,255,0.4)"
@@ -50,6 +50,7 @@
         </j-tooltip>
         <!-- Select/dropdown widget -->
         <v-select
+          variant="solo"
           v-else
           :model-value="custom_widget_selected[idx]"
           @update:modelValue="(val) => update_widget_selection(idx, val)"
@@ -57,7 +58,6 @@
           :placeholder="widget.label"
           :multiple="widget.multiselect"
           density="compact"
-          variant="solo"
           flat
           hide-details
           :style="widget.multiselect ? 'width: 100%; max-width: 320px;' : 'width: 100%; max-width: 250px;'"
@@ -83,7 +83,7 @@
       </template>
     </span>
 
-    <v-btn-toggle v-if="custom_widget_items.length === 0" v-model="active_tool_id" style="overflow-x: hidden" class="transparent">
+    <v-btn-toggle v-model="active_tool_id" style="overflow-x: hidden" class="transparent toolbar-nested-tools">
       <template v-for="[id, {tooltip, img, menu_ind, has_suboptions, primary, visible, disabled_msg}] of Object.entries(tools_data)" :key="id">
         <v-tooltip v-if="primary && visible &&!should_hide_in_popout(id)" location="bottom">
           <template v-slot:activator="{ props }">
@@ -106,7 +106,7 @@
       :open-on-hover="false"
       :close-on-click="close_on_click"
     >
-      <v-list>
+      <v-list class="toolbar-nested-suboptions">
         <template v-for="[id, {tooltip, img, menu_ind, has_suboptions, primary, visible}] of Object.entries(tools_data)" :key="id">
           <v-tooltip
             v-if="menu_ind==suboptions_ind && visible && !should_hide_in_popout(id)"
@@ -245,6 +245,10 @@
 </script>
 
 <style>
+.toolbar-nested-suboptions .v-list-item__content {
+  /* Vuetify reserves 40px for content, but these items contain only a 20px icon. */
+  min-width: 0;
+}
 .suboptions-carrot {
   transform: rotate(-45deg);
   bottom: 0px;
@@ -286,6 +290,9 @@
   flex: 0 0 auto !important;
   min-width: 42px !important;
 }
+.custom-toolbar-mode-cancel {
+  color: white !important;
+}
 .custom-toolbar-mode-label {
   display: inline-block;
   max-width: 240px;
@@ -299,7 +306,36 @@
   width: fit-content !important;
   min-width: 0;
   max-width: 100%;
+  overflow: hidden;
   margin-left: 0 !important;
+}
+/* custom widgets shrink first so apply/confirm buttons stay visible */
+.custom-toolbar-widgets ~ .toolbar-nested-tools {
+  flex: 0 0 auto !important;
+}
+.custom-toolbar-text-input,
+.custom-toolbar-text-input .v-field,
+.custom-toolbar-text-input .v-field__overlay {
+  background-color: #007ba1 !important;
+  box-shadow: none !important;
+  opacity: 1 !important;
+}
+.custom-toolbar-text-input .v-field__input,
+.custom-toolbar-text-input input {
+  color: white !important;
+  caret-color: white !important;
+}
+.custom-toolbar-text-input .v-field,
+.custom-toolbar-text-input .v-field::before,
+.custom-toolbar-text-input .v-field::after,
+.custom-toolbar-text-input .v-field__outline,
+.custom-toolbar-text-input .v-field__outline::before,
+.custom-toolbar-text-input .v-field__outline::after {
+  border-bottom-color: rgba(255, 255, 255, 0.75) !important;
+}
+.custom-toolbar-text-input input::placeholder {
+  color: rgba(255, 255, 255, 0.7) !important;
+  opacity: 1 !important;
 }
 .custom-toolbar-select {
   flex: 1 1 auto !important;
@@ -399,6 +435,10 @@
 }
 .custom-toolbar-slider .v-slider-thumb__surface {
   background-color: white !important;
+}
+.custom-toolbar-slider.v-slider .v-slider__container {
+  /* Cancel the global slider bottom margin so the track stays vertically centered. */
+  margin-bottom: 0;
 }
 .custom-toolbar-slider .v-input__control {
   min-height: unset !important;

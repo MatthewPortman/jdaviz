@@ -6,7 +6,7 @@ from itertools import product
 from unittest.mock import patch
 
 from astropy import units as u
-from astropy.table import Table
+from astropy.table import QTable, Table
 from astropy.io import fits
 from astropy.wcs import WCS
 from astroquery.mast import Mast, MastMissions
@@ -21,12 +21,27 @@ from jdaviz.utils import cached_uri
 
 def test_loaders_registry(specviz_helper):
     # built-in loaders: file, url, etc
-    assert len(specviz_helper.loaders) == len(loader_resolver_registry.members)
+    visible_resolvers = [Resolver for Resolver in loader_resolver_registry.members.values()
+                         if Resolver.is_available(specviz_helper._app)]
+    assert len(specviz_helper.loaders) == len(visible_resolvers)
+
+
+def test_dev_flag_controls_spectral_line_database_loader_visibility(deconfigged_helper):
+    app = deconfigged_helper._app
+    loader_name = 'spectral line database'
+
+    assert loader_name not in deconfigged_helper.loaders
+    loader_item = next(item for item in app.state.loader_items if item['name'] == loader_name)
+    assert loader_item['required_dev_flags'] == ['dev_spectral_lines']
+
+    app.state.dev_spectral_lines = True
+    assert loader_name in deconfigged_helper.loaders
+
+    app.state.dev_spectral_lines = False
+    assert loader_name not in deconfigged_helper.loaders
 
 
 def test_open_close(specviz_helper):
-    specviz_helper._app.state.dev_loaders = True
-
     assert specviz_helper._app.state.drawer_content == ''
 
     loader = specviz_helper.loaders['file']
@@ -67,10 +82,32 @@ def test_catalog_format_available_for_table_target(deconfigged_helper):
     ldr = deconfigged_helper.loaders['object']
 
     ldr.object = table
-    assert 'Catalog' in ldr.format.choices
+    assert 'Source Catalog' in ldr.format.choices
 
-    ldr.target = 'Table'
-    assert 'Catalog' in ldr.format.choices
+    ldr.target = 'Source Catalog Table'
+    assert 'Source Catalog' in ldr.format.choices
+
+
+def test_format_selection_prefers_catalog_for_sky_coords(deconfigged_helper):
+    table = Table({'ra': [1.0, 2.0], 'dec': [3.0, 4.0], 'flux': [5.0, 6.0]})
+    ldr = deconfigged_helper.loaders['object']
+
+    ldr.object = table
+
+    assert ldr.format.selected == 'Source Catalog'
+    assert ldr.format.items[0]['import_confidence_score'] == -1
+
+
+def test_format_selection_prefers_spectral_lines_for_spectral_table(deconfigged_helper):
+    table = QTable({'rest wavelength': [6562.8, 4861.3] * u.AA,
+                    'linename': ['H-alpha', 'H-beta']})
+    deconfigged_helper._app.state.dev_spectral_lines = True
+    ldr = deconfigged_helper.loaders['object']
+
+    ldr.object = table
+
+    assert ldr.format.selected == 'Spectral Lines'
+    assert ldr.format.items[0]['import_confidence_score'] > 0
 
 
 def test_dbg_access(deconfigged_helper):
@@ -308,6 +345,9 @@ def test_hst_product_identification_and_load(deconfigged_helper, hst_product_hdu
 
 @pytest.mark.remote_data
 @pytest.mark.filterwarnings(r"ignore::astropy.wcs.wcs.FITSFixedWarning")
+@pytest.mark.filterwarnings(
+    r"ignore:background window extends beyond image boundaries:UserWarning"
+)
 def test_fits_spectrum2d(deconfigged_helper):
     uri = cached_uri('mast:jwst/product/jw02123-o001_v000000353_nirspec_f170lp-g235h_s2d.fits')
     if 'mast' in uri:
@@ -405,9 +445,8 @@ def test_resolver_url(deconfigged_helper):
     # https valid input (2D Spectrum)
     loader.url = 'https://stsci.box.com/shared/static/exnkul627fcuhy5akf2gswytud5tazmw.fits'  # noqa
 
-    # may change with future importers
-    assert len(loader.format.choices) == 3
-    assert loader.format.selected == '2D Spectrum'  # default may change with future importers
+    assert len(loader.format.choices) == 2
+    assert loader.format.selected == '2D Spectrum'
 
     # test target filtering
     assert len(loader.target.choices) > 1
@@ -420,7 +459,7 @@ def test_resolver_url(deconfigged_helper):
     assert loader.importer.data_label == 'exnkul627fcuhy5akf2gswytud5tazmw_index-0'  # noqa
 
     loader.target = 'Any'
-    assert len(loader.format.choices) == 3
+    assert len(loader.format.choices) == 2
     loader.format = '2D Spectrum'
     assert loader.importer.data_label == 'exnkul627fcuhy5akf2gswytud5tazmw'  # noqa
 
@@ -1335,10 +1374,11 @@ def table_spectrum_no_flux_column():
     wave = np.linspace(1000, 2000, n_points)
     data = np.random.random(n_points) * 1e-13  # Some data with non-flux column name
 
-    col_wave = fits.Column(name='WAVE', format=f'{n_points}E', unit='Angstrom', array=[wave])
+    col_wave = fits.Column(name='WAVE', format=f'{n_points}E', unit='Angstrom',
+                           array=[wave])
     # Use a column name that does NOT match any flux pattern
     col_data = fits.Column(name='INTENSITY', format=f'{n_points}E',
-                           unit='counts', array=[data])
+                           unit='count', array=[data])
 
     hdu = fits.BinTableHDU.from_columns([col_wave, col_data])
     hdu.name = 'SPECTRUM'

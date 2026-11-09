@@ -1,21 +1,21 @@
 from astropy.coordinates import ICRS, SkyCoord
-from astropy.io.fits import BinTableHDU, HDUList, TableHDU
-from astropy.table import Table, QTable, vstack
+from astropy.table import Table, QTable
 import astropy.units as u
 import numpy as np
 import re
 from regions import PixCoord
-from traitlets import Any, Bool, List, Unicode, observe
+from traitlets import Bool, List, Unicode, observe
 
+from jdaviz.core.loaders.resolvers import BaseConeSearchResolver
 from jdaviz.core.loaders.importers import BaseCatalogImporter
-from jdaviz.core.template_mixin import SelectFileExtensionComponent, SelectPluginComponent
+from jdaviz.core.template_mixin import SelectPluginComponent
 from jdaviz.core.registries import loader_importer_registry
 from jdaviz.core.user_api import ImporterUserApi
-from jdaviz.utils import create_data_hash, COORD_WORDS_TO_EXCLUDE
+from jdaviz.utils import COORD_WORDS_TO_EXCLUDE
 
 from .row_link import get_catalog_row_link_manager
 
-__all__ = ['CatalogImporter']
+__all__ = ['SourceCatalogImporter']
 
 # regular expressions to guess which columns correspond to ra, dec, x, y
 COORD_PATTERNS = {
@@ -26,10 +26,12 @@ COORD_PATTERNS = {
 }
 
 
-@loader_importer_registry("Catalog")
-class CatalogImporter(BaseCatalogImporter):
+@loader_importer_registry("Source Catalog")
+class SourceCatalogImporter(BaseCatalogImporter):
 
-    template_file = __file__, "./catalog.vue"
+    template_file = __file__, "./source_catalog.vue"
+
+    dev_spectral_lines = Bool(False).tag(sync=True)
 
     # for catalogs with source positions in sky coordinates
     col_ra_items = List().tag(sync=True)
@@ -64,45 +66,13 @@ class CatalogImporter(BaseCatalogImporter):
     col_id_items = List().tag(sync=True)
     col_id_selected = Unicode().tag(sync=True)
 
-    # HDUList-specific options
-    input_has_extensions = Bool(False).tag(sync=True)
-    extension_items = List().tag(sync=True)
-    extension_selected = Any().tag(sync=True)
-    extension_multiselect = Bool(True).tag(sync=True)
-    no_common_col_msg = Unicode().tag(sync=True)
-
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
+        self.dev_spectral_lines = self._app.state.dev_spectral_lines
+
         if not self.is_valid:
             return
-
-        if isinstance(self.input, HDUList):
-            self.input_has_extensions = True
-
-            ext_options = [{'label': f"{index}: [{hdu.name},{hdu.ver}]",
-                            'name': hdu.name,
-                            'ver': hdu.ver,
-                            'name_ver': f"{hdu.name},{hdu.ver}",
-                            'index': index,
-                            'data_hash': create_data_hash(hdu),
-                            'obj': hdu} for index, hdu in enumerate(self.input)]
-
-            self.extension = SelectFileExtensionComponent(self,
-                                                          items='extension_items',
-                                                          selected='extension_selected',
-                                                          multiselect='extension_multiselect',
-                                                          manual_options=ext_options,
-                                                          filters=[_validate_fits_tablehdu])
-
-            # the choices have already been filtered to only valid table HDUs, so
-            # choose the 0th to select the first valid table HDU by default
-            self.extension.selected = [self.extension.choices[0]]
-
-        else:
-            # otherwise, we got a Table object as input and can proceed
-            # to create the column selection components directly
-            self.input_has_extensions = False
 
         input = self.input_as_table
 
@@ -170,103 +140,37 @@ class CatalogImporter(BaseCatalogImporter):
         # dropdowns for (optional) additional columns
         self._init_col_other(input.colnames)
 
-    @property
-    def input_as_table(self):
-        if hasattr(self, 'extension'):
-            if self.extension.selected in [None, '', []]:
-                return None
-
-            table_ext = self.extension.selected_obj
-
-            # reset message about no common columns between extensions each time
-            # we get the input as table, so that if the user changes to a different
-            # extension or selection of extensions, the message will be cleared
-            self.no_common_col_msg = ''
-            table_types = (TableHDU, BinTableHDU)
-
-            if len(table_ext) == 1 and isinstance(table_ext[0], table_types):
-                return QTable(table_ext[0].data)
-
-            elif len(table_ext) > 1 and all(isinstance(t, table_types) for t in table_ext):
-                # combine tables, only including columns that are common beween
-                # all tables in the selection. There will be text in the UI to
-                # indicate this and suggest loading tables individually if the
-                # the selected extensions contain different column names.
-                tables = [QTable(ext.data) for ext in table_ext]
-                common_cols = set(tables[0].colnames)
-                for tab in tables[1:]:
-                    common_cols = common_cols & set(tab.colnames)
-
-                common_cols = list(common_cols)
-
-                # if there are no common columns between tables, we can't combine
-                # them. return None and the UI will indicate that the user should
-                # load tables separately.
-                if len(common_cols) == 0:
-                    msg = (
-                        "The selected extensions have no columns in common. "
-                        "Please select a single extension to load, or select "
-                        "multiple extensions that have at least one column "
-                        "name in common to enable loading in multiselect mode."
-                    )
-                    self.no_common_col_msg = msg
-                    return None
-
-                combined_table = vstack([t[common_cols] for t in tables],
-                                        join_type="exact")
-
-                return combined_table
-
-        return self.input
-
     def _check_is_valid(self):
-        if self._app.config not in ('deconfigged', 'imviz', 'mastviz'):
-            # NOTE: temporary during deconfig process
-            return 'Catalog importer is only supported in imviz, mastviz, generalized jdaviz.'
+        basic_check = self._basic_table_validity_checks(self.input)
+        if basic_check:
+            return basic_check
 
-        if isinstance(self.input, (Table, QTable)) and len(self.input):
+        if not hasattr(self, 'col_ra'):
+            # column components are not yet created (called during __init__),
+            # so we can only check the basic validity of the input
             return ''
 
-        elif isinstance(self.input, HDUList):
-            # check for the presence of at least one TableHDU/BinTableHDU extension
-            for i, hdu in enumerate(self.input):
-                if isinstance(hdu, (TableHDU, BinTableHDU)) and len(hdu.data) > 0:
-                    return ''
+        if not ((self._has_selected_col('col_ra') and self._has_selected_col('col_dec'))
+                or (self._has_selected_col('col_x') and self._has_selected_col('col_y'))):
+            return 'No detected columns for RA/Dec or X/Y.'
 
-        return 'Input is not a valid catalog.'
+        return ''
 
-    @observe('extension_selected')
-    def _on_extension_selected_change(self, event):
-        # when the selected extension changes, we need to update the column selection dropdowns
-        # with the columns from the newly selected extension
-        if not hasattr(self, 'extension'):
-            return
+    @property
+    def import_confidence_score(self):
+        if (isinstance(self.resolver, BaseConeSearchResolver)
+                and self.resolver.treat_table_as_query):
+            return 2
 
-        # if no column selection dropdowns have been created yet, we can skip
-        # the update since they will be created with the correct columns based
-        # on the selected extension in the __init__
-        if not hasattr(self, 'col_x'):
-            return
+        # NOTE: is_valid requires either ra/dec or x/y
+        has_ra_dec = all(self._has_selected_col(f'col_{col}') for col in ('ra', 'dec'))
+        has_xy = all(self._has_selected_col(f'col_{col}') for col in ('x', 'y'))
+        if has_ra_dec and has_xy:
+            return 1
+        return -1
 
-        input = self.input_as_table
-
-        if input is None:
-            # if input is None, that means the selected extensions had no common
-            # columns, so we should clear out the column selection dropdowns
-            # options (this section will be hidden in the UI)
-            for col in ['ra', 'dec', 'x', 'y']:
-                self._update_col_items_and_selected(f'col_{col}', ['---'])
-            self._update_col_items_and_selected('col_other', ['---'], select_first=False)
-            return
-
-        if not isinstance(input, (Table, QTable)):
-            return
-
-        # update column selection dropdowns with columns from the newly selected extension
-        for col in ['ra', 'dec', 'x', 'y']:
-            self._update_col_items_and_selected(f'col_{col}', self._guess_coord_cols(col))
-
-        self._update_col_items_and_selected('col_other', input.colnames, select_first=False)
+    def _guess_cols_for_extension_change(self):
+        return {f'col_{col}': self._guess_coord_cols(col) for col in ['ra', 'dec', 'x', 'y']}
 
     def _guess_coord_cols(self, col):
         """
@@ -313,6 +217,71 @@ class CatalogImporter(BaseCatalogImporter):
 
         return choices
 
+    def _check_coordinate_pair_valid(self, input):
+        """
+        Determine whether a valid coordinate pair is selected (a complete
+        RA/Dec pair and/or a complete X/Y pair, with RA and Dec not pointing
+        to the same non-SkyCoord column, and X and Y not pointing to the
+        same non-PixCoord column), and set ``import_disabled_msg``
+        accordingly. Empty msg = enabled, non-empty = disabled.
+        """
+        ra = self.col_ra_selected
+        dec = self.col_dec_selected
+        x = self.col_x_selected
+        y = self.col_y_selected
+
+        ra_missing = ra in ('---', '', None)
+        dec_missing = dec in ('---', '', None)
+        x_missing = x in ('---', '', None)
+        y_missing = y in ('---', '', None)
+
+        # same ra and dec columns selected (and not a SkyCoord column, which
+        # contains both RA and Dec) is not a valid pair
+        ra_dec_same = (not ra_missing and ra == dec
+                       and not isinstance(input[ra], SkyCoord))
+
+        # same x and y columns selected (and not a PixCoord column, which
+        # contains both X and Y) is not a valid pair
+        xy_same = (not x_missing and x == y
+                   and not isinstance(input[x], PixCoord))
+
+        # disable import if RA is selected but Dec is not (or vice versa), or if the
+        # same column is selected for both RA and Dec
+        ra_dec_mismatch = ra_missing != dec_missing
+        ra_dec_complete = not ra_missing and not dec_missing and not ra_dec_same
+
+        # disable import if X is selected but Y is not (or vice versa)
+        xy_mismatch = x_missing != y_missing
+        xy_complete = not x_missing and not y_missing and not xy_same
+
+        if ra_dec_same:
+            self.import_disabled_msg = (
+                "RA and Dec cannot be the same column. Select different "
+                "columns for RA and Dec, or clear both to use X/Y instead."
+            )
+        elif xy_same:
+            self.import_disabled_msg = (
+                "X and Y cannot be the same column. Select different "
+                "columns for X and Y, or clear both to use RA/Dec instead."
+            )
+        elif ra_dec_mismatch:
+            self.import_disabled_msg = (
+                "Cannot import catalog with only RA or only Dec selected. "
+                "Select both RA and Dec, or clear both to use X/Y instead."
+            )
+        elif xy_mismatch:
+            self.import_disabled_msg = (
+                "Cannot import catalog with only X or only Y selected. "
+                "Select both X and Y, or clear both to use RA/Dec instead."
+            )
+        elif not (ra_dec_complete or xy_complete):
+            self.import_disabled_msg = (
+                "Cannot import catalog without valid coordinate column pair. "
+                "Select both RA and Dec and/or both X and Y coordinates."
+            )
+        else:
+            self.import_disabled_msg = ''
+
     @observe('col_ra_selected', 'col_dec_selected', 'col_x_selected', 'col_y_selected')
     def _on_coordinate_column_selected(self, msg):
         """
@@ -320,21 +289,22 @@ class CatalogImporter(BaseCatalogImporter):
         already, to set the col_ra_has_unit and col_dec_has_unit traitlets.
         -  Make sure that ra and dec columns are not the same (unless SkyCoord) and
         disable the import button if they are the same.
-        - Check if only RA or Dec is selected without the other, and disable import
-        in that case.
+        - Check if only RA or Dec (or only X or Y) is selected without its pair,
+        and disable import in that case.
+        - Require at least one complete coordinate pair (RA/Dec or X/Y) to be
+        selected, otherwise disable import.
         """
 
         ra = self.col_ra_selected
         dec = self.col_dec_selected
-        x = self.col_x_selected
-        y = self.col_y_selected
-
-        import_disabled = False
 
         input = self.input_as_table
 
         if not isinstance(input, (Table, QTable)):
             return
+
+        ra_missing = ra in ('---', '', None)
+        dec_missing = dec in ('---', '', None)
 
         if msg['name'] in ('col_ra_selected', 'col_dec_selected'):
 
@@ -346,72 +316,40 @@ class CatalogImporter(BaseCatalogImporter):
                     self.col_ra_has_unit = True
                 elif msg['name'] == 'col_dec_selected':
                     self.col_dec_has_unit = True
-                # disable import if RA is selected but Dec is not (or vice versa)
-                if (ra in ['---', ''] or ra is None) != (dec in ['---', ''] or dec is None):
-                    import_disabled = True
-                self.coord_frame_selected = '----'
-                self.coord_equinox_selected = '----'
-                return
-
-            has_units = False
-            if isinstance(input[axis], SkyCoord):
-                has_units = True
-            elif hasattr(input[axis], 'unit'):
-                if input[axis].unit is not None:
-                    has_units = True
-                    # unit must be an angle unit
-                    if input[axis].unit.physical_type != 'angle':
-                        has_units = False
-
-            # set the 'has units' traitlets for ra/dec, which determine if the unit
-            # selection dropdowns should be exposed
-            if msg['name'] == 'col_ra_selected':
-                self.col_ra_has_unit = has_units
-            elif msg['name'] == 'col_dec_selected':
-                self.col_dec_has_unit = has_units
-
-            # disable import if the same ra and dec columns are selected
-            # and they are NOT a SkyCoord column (which contains both RA and Dec),
-            if ra == dec and not isinstance(input[axis], SkyCoord):
-                import_disabled = True
             else:
-                import_disabled = False
+                has_units = False
+                if isinstance(input[axis], SkyCoord):
+                    has_units = True
+                elif hasattr(input[axis], 'unit'):
+                    if input[axis].unit is not None:
+                        has_units = True
+                        # unit must be an angle unit
+                        if input[axis].unit.physical_type != 'angle':
+                            has_units = False
 
-            # disable import if RA is selected but Dec is not (or vice versa)
-            if (ra in ['---', ''] or ra is None) != (dec in ['---', ''] or dec is None):
-                import_disabled = True
+                # set the 'has units' traitlets for ra/dec, which determine if the unit
+                # selection dropdowns should be exposed
+                if msg['name'] == 'col_ra_selected':
+                    self.col_ra_has_unit = has_units
+                elif msg['name'] == 'col_dec_selected':
+                    self.col_dec_has_unit = has_units
 
             # sync coord_frame and coord_equinox with ra/dec selection state
-            ra_is_invalid = ra in ('---', '', None)
-            dec_is_invalid = dec in ('---', '', None)
-            if ra_is_invalid or dec_is_invalid:
+            if ra_missing or dec_missing:
                 self.coord_frame_selected = '----'
                 self.coord_equinox_selected = '----'
             elif self.coord_frame_selected == '----':
                 self.coord_frame_selected = 'icrs'
                 self.coord_equinox_selected = 'J2000.0'
 
-        elif msg['name'] in ('col_x_selected', 'col_y_selected'):
-            # disable import if RA is selected but Dec is not (or vice versa)
-            if (x in ['---', ''] or x is None) != (y in ['---', ''] or y is None):
-                import_disabled = True
-
-        # finally, set the import_disabled_msg traitlet based on what was determined
-        # from the checks above. Empty msg = enabled, non-empty = disabled
-        if import_disabled:
-            self.import_disabled_msg = (
-                "Cannot import catalog without valid coordinate column pair. "
-                "Select both RA and Dec, or both X and Y coordinates."
-            )
-        else:
-            self.import_disabled_msg = ''
+        self._check_coordinate_pair_valid(input)
 
     @staticmethod
     def _get_supported_viewers():
         return [{'label': 'Image', 'reference': 'imviz-image-viewer', 'allow_create': False},
+                {'label': 'Source Catalog Table', 'reference': 'source-catalog-table-viewer'},
                 {'label': 'Scatter', 'reference': 'scatter-viewer'},
-                {'label': 'Histogram', 'reference': 'histogram-viewer'},
-                {'label': 'Table', 'reference': 'table-viewer'}]
+                {'label': 'Histogram', 'reference': 'histogram-viewer'}]
 
     @property
     def user_api(self):
@@ -531,7 +469,7 @@ class CatalogImporter(BaseCatalogImporter):
             if isinstance(input[self.col_x_selected][0], str):
                 try:
                     x_col = [float(x) for x in table[self.col_x_selected]]
-                    output_table['X'] = x_col
+                    output_table[self.col_x_selected] = x_col
                 except ValueError:
                     raise ValueError("Could not parse X column as numeric values.")
             # if input is a PixCoord instance, isolate x
@@ -542,12 +480,12 @@ class CatalogImporter(BaseCatalogImporter):
                 except ValueError:
                     raise ValueError("Could not parse X column as PixCoord values.")
             else:
-                output_table['X'] = table[self.col_x_selected].astype(float)
+                output_table[self.col_x_selected] = table[self.col_x_selected].astype(float)
 
             if isinstance(input[self.col_y_selected][0], str):
                 try:
                     y_col = [float(y) for y in table[self.col_y_selected]]
-                    output_table['Y'] = y_col
+                    output_table[self.col_y_selected] = y_col
                 except ValueError:
                     raise ValueError("Could not parse Y column as numeric values.")
             elif isinstance(input[self.col_y_selected][0], PixCoord):
@@ -557,10 +495,7 @@ class CatalogImporter(BaseCatalogImporter):
                 except ValueError:
                     raise ValueError("Could not parse Y column as PixCoord values.")
             else:
-                output_table['Y'] = table[self.col_y_selected].astype(float)
-
-            output_table[self.col_x_selected] = table[self.col_x_selected]
-            output_table[self.col_y_selected] = table[self.col_y_selected]
+                output_table[self.col_y_selected] = table[self.col_y_selected].astype(float)
 
             # add the selected ra/dec columns to meta
             output_table.meta['_jdaviz_loader_x_col'] = self.col_x_selected
@@ -587,8 +522,3 @@ class CatalogImporter(BaseCatalogImporter):
         # ensure the app-level manager that links catalog rows to viewer contents
         # exists (and is subscribed) as soon as a catalog has been imported
         get_catalog_row_link_manager(self._app)
-
-
-def _validate_fits_tablehdu(item):
-    hdu = item.get('obj')
-    return isinstance(hdu, (TableHDU, BinTableHDU))

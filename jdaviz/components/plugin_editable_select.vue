@@ -2,6 +2,7 @@
   <div>
   <j-flex-row>
     <v-select
+      variant="underlined"
       v-if="mode=='select'"
       attach
       :menu-props="{ location: 'bottom start' }"
@@ -44,9 +45,9 @@
       type="warning"
       style="width: 100%; padding-top: 16px; padding-bottom: 16px"
     >
-      <span v-if="api_hints_enabled && api_hint_remove" class="api-hint">
+      <j-api-hint v-if="api_hints_enabled && api_hint_remove">
         {{api_hint_remove}}('{{selected}}')
-      </span>
+      </j-api-hint>
       <span v-else>
         remove '{{selected}}' {{label.toLowerCase()}}?
       </span>
@@ -60,6 +61,7 @@
       </template>
     </v-alert>
     <v-text-field
+      variant="underlined"
       v-else-if="['rename', 'add'].indexOf(mode) !== -1"
       :model-value="edit_value"
       @update:modelValue="$emit('update:edit_value', $event)"

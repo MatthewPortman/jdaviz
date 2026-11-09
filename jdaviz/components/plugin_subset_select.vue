@@ -2,6 +2,7 @@
   <div>
   <j-flex-row v-if="items.length> 1 || selected.length===0 || show_if_single_entry || api_hints_enabled">
     <v-select
+      variant="underlined"
       v-if="mode=='select' || mode===undefined"
       :menu-props="{ location: 'bottom start' }"
       attach
@@ -86,9 +87,9 @@
       type="warning"
       style="width: 100%; padding-top: 16px; padding-bottom: 16px"
     >
-      <span v-if="api_hints_enabled && api_hint_remove" class="api-hint">
+      <j-api-hint v-if="api_hints_enabled && api_hint_remove">
         {{api_hint_remove}}('{{selected}}')
-      </span>
+      </j-api-hint>
       <span v-else>
         remove '{{selected}}'?
       </span>

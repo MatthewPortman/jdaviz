@@ -17,6 +17,7 @@ from glue.core.message import SubsetCreateMessage, SubsetDeleteMessage
 from glue.core.subset import Subset, MaskSubsetState
 from glue.config import data_translator
 from ipywidgets.widgets import widget_serialization
+from ipywidgets import Layout
 
 from astropy.nddata import NDDataArray, CCDData, StdDevUncertainty
 import astropy.units as u
@@ -25,13 +26,12 @@ from regions.core.core import Region
 from specutils import Spectrum, SpectralRegion
 
 from jdaviz.app import PrivateApplication
-from jdaviz.configs.default.plugins.viewers import JdavizViewerWindow
 from jdaviz.core.events import SnackbarMessage, ExitBatchLoadMessage, SliceSelectSliceMessage
 from jdaviz.core.loaders.resolvers import find_matching_resolver
 from jdaviz.core.template_mixin import show_widget
 from jdaviz.core.user_api import (DataApi, SpectralDataApi, SpatialDataApi,
                                   TemporalSpatialDataApi, SpectralSpatialDataApi)
-from jdaviz.utils import (JDAVIZ_CONFIGS, data_has_valid_wcs, CONFIGS_WITH_LOADERS,
+from jdaviz.utils import (JDAVIZ_CONFIGS, data_has_valid_wcs,
                           suppress_widget_comms)
 from jdaviz.core.unit_conversion_utils import (all_flux_unit_conversion_equivs,
                                                is_unit_per_solid_angle,
@@ -149,10 +149,13 @@ class ConfigHelper(HubListener):
         loaders : dict
             dict of loader objects
         """
-        if not (self._app.state.dev_loaders or self._app.config in CONFIGS_WITH_LOADERS):  # noqa
-            raise NotImplementedError("loaders is under active development and requires a dev-flag to test")  # noqa
-        loaders = {item['label']: widget_serialization['from_json'](item['widget'], None).user_api
-                   for item in self._app.state.loader_items}
+        if self._app.config == 'mosviz':  # noqa
+            raise NotImplementedError("loaders is not supported in mosviz")  # noqa
+        loaders = {}
+        for item in self._app.state.loader_items:
+            loader = widget_serialization['from_json'](item['widget'], None).user_api
+            if loader._obj.is_available(self._app):
+                loaders[item['label']] = loader
         return loaders
 
     def _get_loader(self, resolver_name, parser_name=None, importer_name=None):
@@ -198,7 +201,7 @@ class ConfigHelper(HubListener):
     def set_viewer_data_columns(self, data_label, viewer_data, column_prefix='Data: '):
         """
         Add or update read-only ``"<column_prefix><viewer>"`` columns on a loaded
-        catalog, one per viewer, listing the data to show in that viewer.
+        Source Catalog, one per viewer, listing the data to show in that viewer.
 
         When a row is clicked in any table viewer showing the catalog, each listed
         viewer is cleared and repopulated with exactly the data in its column for
@@ -208,7 +211,7 @@ class ConfigHelper(HubListener):
         Parameters
         ----------
         data_label : str
-            Label of a catalog (loaded via the Catalog importer) in the data
+            Label of a catalog (loaded via the Source Catalog importer) in the data
             collection.
         viewer_data : dict
             Mapping of viewer reference (``str``) or viewer instance to the per-row
@@ -223,7 +226,7 @@ class ConfigHelper(HubListener):
         list
             The names of the registered columns.
         """
-        from jdaviz.core.loaders.importers.catalog.row_link import (
+        from jdaviz.core.loaders.importers.source_catalog.row_link import (
             get_catalog_row_link_manager)
         manager = get_catalog_row_link_manager(self._app)
         return manager.set_viewer_data_columns(data_label, viewer_data, column_prefix)
@@ -403,9 +406,9 @@ class ConfigHelper(HubListener):
         Returns
         -------
         viewers : dict
-            dict of viewer objects
+            dict of viewer API objects
         """
-        return {viewer._ref_or_id: JdavizViewerWindow(viewer, app=self._app).user_api
+        return {viewer._ref_or_id: viewer._viewer_window.user_api
                 for viewer in list(self._app._viewer_store.values())}
 
     def _get_clone_viewer_reference(self, reference):
@@ -582,16 +585,20 @@ class ConfigHelper(HubListener):
         if height is not None:
             if isinstance(height, int):
                 height = f"{height}px"
+            # There seem to be rare cases where we can get here while layout is still None
+            if self._app.layout is None:
+                self._app.layout = Layout()
             self._app.layout.height = height
             self._app.state.settings['context']['notebook']['max_height'] = height
 
         if tray is not None:
             self._app.state.drawer_content = tray
-        elif self._app.config in CONFIGS_WITH_LOADERS or self._app.state.dev_loaders:  # noqa
-            if not len(self.viewers) and not len(self._app.state.drawer_content):
-                self._app.state.drawer_content = 'loaders'
-            else:
-                self._app.state.drawer_content = 'plugins'
+        elif self._app.config != 'mosviz':  # noqa
+            if not len(self._app.state.drawer_content):
+                if not len(self.viewers) or not len(self._app.state.data_items):
+                    self._app.state.drawer_content = 'loaders'
+                else:
+                    self._app.state.drawer_content = 'plugins'
         else:
             self._app.state.drawer_content = 'plugins'
 
@@ -904,7 +911,7 @@ class ImageConfigHelper(ConfigHelper):
     def default_viewer(self):
         """Default viewer instance. This is typically the first viewer
         (e.g., "imviz-0" or "cubeviz-0")."""
-        return JdavizViewerWindow(self._default_viewer, app=self._app).user_api
+        return self._default_viewer._viewer_window.user_api
 
     @deprecated(since="4.2", alternative="subset_tools.import_region")
     def load_regions_from_file(self, region_file, region_format='ds9', max_num_regions=20,

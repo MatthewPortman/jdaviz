@@ -37,7 +37,7 @@
         :items="search_input_items.map(i => i.label)"
         v-model:selected="search_input_selected"
         label="Input"
-        api_hint="ldr.search_input_select ="
+        api_hint="ldr.search_input ="
         :api_hints_enabled="api_hints_enabled"
         hint="Select the source of cone-search coordinates."
       ></plugin-select>
@@ -46,6 +46,7 @@
       <div v-if="search_input_selected === 'Source'">
         <j-flex-row>
           <v-text-field
+            variant="underlined"
             v-model="source"
             :label="api_hints_enabled ? 'ldr.source =' : 'Source/Coordinates'"
             :class="api_hints_enabled ? 'api-hint' : null"
@@ -81,6 +82,7 @@
           <div style="display: grid; grid-template-columns: auto 1fr; align-items: center; column-gap: 8px">
             <v-switch
               v-model="coord_follow_viewer_pan"
+              color="primary"
               hide-details
               density="compact"
             ></v-switch>
@@ -184,6 +186,7 @@
       <j-flex-row justify="space-between">
         <div :style="{ width: '55%' }">
           <v-text-field
+            variant="underlined"
             v-model.number="radius"
             type="number"
             :label="api_hints_enabled ? 'ldr.radius =' : 'Radius'"
@@ -221,6 +224,7 @@
 
       <j-flex-row justify="space-between" style="margin-top: 12px">
         <v-text-field
+          variant="underlined"
           v-model.number='max_results'
           type="number"
           style="padding: 0px"

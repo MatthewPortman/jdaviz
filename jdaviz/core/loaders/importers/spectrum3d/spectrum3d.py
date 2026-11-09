@@ -423,6 +423,13 @@ class Spectrum3DImporter(BaseImporterToDataCollection, SpectrumInputExtensionsMi
             expose += ['dq_extension']
         return ImporterUserApi(self, expose)
 
+    @property
+    def import_confidence_score(self):
+        # 3D spectra should be strongly preferred when detected.
+        # this ensures data with ndim==3 default to 3D Spectrum instead of
+        # Source Catalog even when RA/Dec/X/Y pairs are present in bintable HDU extensions
+        return 2
+
     def _check_is_valid(self):
         if self._app.config not in ('deconfigged', 'cubeviz'):
             # NOTE: temporary during deconfig process
@@ -529,21 +536,19 @@ class Spectrum3DImporter(BaseImporterToDataCollection, SpectrumInputExtensionsMi
             ext.meta['plugin'] = spext._plugin_name
         except Exception as e:
             ext = None
-            msg = SnackbarMessage(
+            self._app.hub.broadcast(SnackbarMessage(
                 "Automatic spectrum extraction failed. See the 3D spectral extraction"
                 " plugin to perform a custom extraction",
-                color='error', sender=self, timeout=10000, traceback=e)
-        else:
-            msg = SnackbarMessage(
-                "The extracted 1D spectrum was generated automatically."
-                " See the 3D spectral extraction plugin for details or to"
-                " perform a custom extraction.",
-                color='warning', sender=self, timeout=10000)
-        self._app.hub.broadcast(msg)
+                sender=self, color='error', timeout=10000, traceback=e))
 
         if ext is not None:
             self.add_to_data_collection(ext, ext_data_label, viewer_select=self.ext_viewer,
                                         data_type='1D Spectrum')
+            self._app.hub.broadcast(SnackbarMessage(
+                "The extracted 1D spectrum was generated automatically."
+                " See the 3D spectral extraction plugin for details or to"
+                " perform a custom extraction.",
+                sender=self, color='warning', timeout=10000))
 
             if self.has_dq and not self.flux_only:
                 dq_hdu = self.dq_extension.selected_obj

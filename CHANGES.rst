@@ -3,6 +3,7 @@
 
 New Features
 ------------
+- Exposed Line Analysis table and updated relevant API hints. [#4478]
 
 - Data menu/legend overflow: more data label icons are now shown and two or more icons must be
   present beyond the overflow limit before the overflow icon will appear. [#4160]
@@ -43,7 +44,7 @@ New Features
 - Show basic table subset information in the Subset Tools plugin. [#4266]
 
 - Implement a "focus mode" that shows a simplified view of a single viewer.  Focus mode can
-  be toggled on/off from the viewer toolbar or via the API. [#4242]
+  be toggled on/off from the viewer toolbar or via the API. [#4242, #4470]
 
 - Parenting now includes a 'None' option to allow multi-extension FITS to be loaded as separate data entries. [#4248]
 
@@ -61,11 +62,7 @@ New Features
 - Improvements to spectral axis unit conversion logic to support workflows and
   avoid errors in mixed unit viewers in deconfigged. [#4292]
 
-- Add Line List Database loader. [#4305, #4314, #4319]
-
-- Add consolidated emission line list and ability to query database in API. [#4314]
-
-- Table viewer "active row" selection to control data visible in other viewers. [#4279, #4322, #4350]
+- Table viewer "active row" selection to control data visible in other viewers. [#4279, #4322, #4350, #4397]
 
 - Allow markers plugin table to create other viewer types besides Scatter (i.e. Table or Histogram). [#4331]
 
@@ -87,8 +84,6 @@ New Features
 - Keep visibility consistent between blink and plot options. [#4316]
 
 - Change appearance of the overwrite warning overlay shown in the export plugin. [#4338]
-
-- Add consolidated emission line list and ability to query database in API. [#4314, 4330]
 
 - Improvements to flux / surface brightness unit conversion logic to support
   workflows and avoid errors in mixed unit viewers in deconfigged. [#4336]
@@ -114,10 +109,38 @@ New Features
 
 - Fix issue where catalog datasets could not be deleted from scatter viewers when aligned by WCS. [#4389]
 
-- Some modifications to spectral lines loader and table, including disabling
-  deletion of line name / rest wavelengths columns assigned by the loader, removing
-  the selection of line medium in loader, and adding line name to table by
-  default. [#4386]
+- Refactoring and some renaming of table viewer classes and catalog loaders.
+  The 'Source Catalog Table' viewer is now specialized for catalogs
+  with RA/Dec or X/Y position columns. The existing 'Table' viewer class is now the base table viewer for
+  generic tabular data without columns with special roles. There are now two
+  tabular data loaders - 'Generic Catalog' for generic tabular data and
+  'Source Catalog' (formerly 'Catalog') for catalogs with RA/Dec or X/Y position
+  columns. [#4401]
+
+- Logger is accessible in UI before data is loaded. [#4403]
+
+- Format choices are now sorted so that the most likely format is at the top of the list
+  and selected by default. Catalog versus image/spectrum format ranking is based on the presence of
+  expected catalog keywords compared with the dimensions of the input data. [#4402, #4505]
+
+- Improve logic in unit conversion plugin to prevent stale or incompatible unit
+  selections when data is removed from viewers. [#4423]
+
+- Add update feature to standalone app to allow users to click to see if update is available. [#4400]
+
+- Add restriction to Source Catalog loader that either an ra/dec pair or an x/y
+  pair must be selected for import. [#4435]
+
+- Allow loading all tabular data types from FITS table extensions. [#4443]
+
+- Filter out any tabular data from the 'recenter' button dropdown in the subset
+  tools plugin, and remove the 'pixel' unit from scatter coordinates until unit
+  support is implemented. [#4462]
+
+- Snackbar messages shown during load are now instead shown as banners
+  and the popup delayed until after load is complete. [#4438]
+
+- Improve logic for incrementing default data-labels when extensions are also appended. [#4503]
 
 Mosviz
 ^^^^^^
@@ -125,11 +148,12 @@ Mosviz
 API Changes
 -----------
 
-Mosviz
-^^^^^^
-
 Bug Fixes
 ---------
+
+- Unit Conversion plugin now responds to viewers being removed. [#4480]
+
+- 2D spectrum viewer now refreshes its cached spectral axis whenever data is added or removed. [#4480]
 
 - HST products (as defined by ``OBSTYPE``) are now correctly identified as being
   either images or 2D spectra. [#4217]
@@ -167,19 +191,94 @@ Other Changes and Additions
 - Changing visible columns in the table viewer has been moved from the Plot Options
   plugin to a tool in the table viewer toolbar (with deprecation). [#4382]
 
-5.0.4 (unreleased)
+
+5.0.6 (unreleased)
 ==================
 
 Bug Fixes
 ---------
 
-- Fix case where file drop loader would not show importer options. [#4303]
+- Fix using ``get_regions`` when a subset is defined on scatter data. [#4433]
+
+- Fix layer selector references when renaming viewers. [#4458]
+
+- Max-pin glue-jupyter and vue to specific versions to ensure compatibility before
+  vue3 compatible glue-jupyter release. [#4463]
+
+- Fix rare traceback when passing ``height`` keyword to ``jdaviz.show()``. [#4464]
+
+- Fix handling of units to load HLSP JADES DR4 spectra x1D/S2D files. [#4477]
+
+- Fix unit conversion error that occurs with mixed per-steradian and per-square-pixel
+  surface brightness units. [#4483]
+
+- Fix bug when creating a subset on an image viewer when there is a cube loaded
+  by preventing those subsets from appearing in the cube viewer.. [#4490]
+
+- Fix spectrum auto-extraction and other errors when creating a subset on a cube viewer
+  while aligned by WCS, including broken links between a cube and its uncertainty cube
+  after relinking. [#4490]
+
+- Added backup source name resolution servers and increased timeouts for astroquery
+  search to address upstream server issues. [#4498]
+
+- Fix error when deleting all viewers after loading a 3D spectral cube. [#4500]
+
+- Skip marker layers when resetting Unit Conversion units. [#4501]
+
+- Prevent cube and 2D-spectrum viewers from inheriting WCS linking intended for
+  image viewers. [#4497]
+
+- Refactoring of some of the unit conversion logic in aperture photometry, in
+  particular handling of mixed-unit datasets and display unit conversions. [#4496]
+
+Mosviz
+^^^^^^
+
+
+5.0.5 (2026-10-16)
+==================
+
+Bug Fixes
+---------
+- Fix recursion limit bug when attempting to set an invalid data menu layer in
+  multiselect mode. [#4419]
+
+- Fix a bug in Line Analysis that looks for a (possibly) non-existent mask when getting the continuum [#4406]
+
+- Fix viewer container width. [#4424, #4430]
+
+- Fixed AttributeError: 'NoneType' object has no attribute 'height' by ensuring figure_widget has an assigned layout. [#4429]
+
+- Fix an IO error when loading another data type after loading a 1D spectrum. [#4428]
+
+Mosviz
+^^^^^^
+
+5.0.4 (2026-09-23)
+==================
+
+Bug Fixes
+---------
+
+- Stop using SkyCoord.from_name() to try to resolve sources in the astroquery loader
+  that are already RA and Dec coordinates. [#4193]
+
+- fix case where file drop loader would not show importer options. [#4303]
 
 - fix URL loader not showing in UI. [#4361]
 
-- Fix image importer support for Roman L3 mosaic files. [#4309]
+- fix astro-image-display API for images without WCS. [#4304]
 
-- Fix issue where snackbar is attached to the notebook rather than to the app. [#4313]
+- Adjust data menu behavior to allow for showing more icons when the viewer is short. [#4352]
+
+- Fix a couple incorrect API hints in the data loaders. [#4399]
+
+- Ensure model fitting equation is validated before calculate fitting. [#4407]
+
+
+Imviz
+^^^^^
 
 - Allow markers plugin table to handle images with no flux units specified in the header. [#4320]
 
@@ -188,10 +287,6 @@ Bug Fixes
 
 - Avoid triggering a 2D spectrum-related warning for NIRISS images. [#4342]
 
-- Adjust data menu behavior to allow for showing more icons when the viewer is short. [#4352]
-
-Mosviz
-^^^^^^
 
 5.0.3 (2026-07-21)
 ==================

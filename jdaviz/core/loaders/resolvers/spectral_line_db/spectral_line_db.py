@@ -29,7 +29,7 @@ class SpectralLineDatabaseResolver(BaseResolver):
 
     Users search by spectral range, element, and/or line-name substring,
     then stage individual results to build up an output
-    ``QTable(linename, rest)`` that is consumed by ``LineListImporter``.
+    ``QTable(linename, rest)`` that is consumed by ``SpectralLinesImporter``.
 
     Example usage from a notebook::
 
@@ -46,6 +46,7 @@ class SpectralLineDatabaseResolver(BaseResolver):
 
     template_file = (__file__, "spectral_line_db.vue")
     requires_api_support = False
+    required_dev_flags = ('dev_spectral_lines',)
 
     title = Unicode("Spectral Line Database").tag(sync=True)
 
@@ -99,6 +100,8 @@ class SpectralLineDatabaseResolver(BaseResolver):
         return None
 
     def _check_is_valid(self):
+        if not self.app.state.dev_spectral_lines:
+            return "Spectral lines development mode is not enabled."
         if self._db is None:
             return "No spectral lines database loaded."
         return ""

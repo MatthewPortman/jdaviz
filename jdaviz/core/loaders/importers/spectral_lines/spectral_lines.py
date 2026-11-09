@@ -33,7 +33,7 @@ _LINENAME_PATTERNS = [
 @loader_importer_registry("Spectral Lines")
 class SpectralLinesImporter(BaseCatalogImporter):
     """
-    Importer for spectral line list tables.
+    Importer for Spectral Line Tables.
 
     Accepts an astropy ``Table`` or ``QTable``, and lets the user designate a
     spectral location column along with its unit.
@@ -62,7 +62,7 @@ class SpectralLinesImporter(BaseCatalogImporter):
         if not self.is_valid:
             return
 
-        input_table = self.input
+        input_table = self.input_as_table
 
         self.spectral_loc = SelectPluginComponent(
             self,
@@ -85,20 +85,38 @@ class SpectralLinesImporter(BaseCatalogImporter):
                                               selected='linename_selected',
                                               manual_options=self._guess_linename_col())  # noqa
 
-        self._init_col_other(input_table.colnames)
+        colnames = input_table.colnames if isinstance(input_table, (Table, QTable)) else []
+        self._init_col_other(colnames)
+
+    def _guess_cols_for_extension_change(self):
+        return {'spectral_loc': self._guess_spectral_loc_col(),
+                'linename': self._guess_linename_col()}
 
     def _check_is_valid(self):
-        if not getattr(self._app.state, 'dev_loaders', False):
-            return ('Spectral Lines importer is under active development '
-                    '(requires dev_loaders to be enabled).')
-
-        if not isinstance(self.input, (Table, QTable)):
-            return 'Input must be an astropy Table or QTable.'
-
-        if len(self.input) == 0:
-            return 'Input table is empty.'
-
+        if not self._app.state.dev_spectral_lines:
+            return "Spectral lines dev mode is not enabled."
+        basic_check = self._basic_table_validity_checks(self.input)
+        if basic_check:
+            return basic_check
+        if not hasattr(self, 'spectral_loc'):
+            # column components are not yet created (called during __init__),
+            # so we can only check the basic validity of the input
+            return ''
+        if not self._has_selected_col('spectral_loc'):
+            return 'No detected columns for spectral location.'
         return ''
+
+    @property
+    def import_confidence_score(self):
+        if self.resolver.__class__.__name__ == 'SpectralLineDatabaseResolver':
+            return 2
+
+        # NOTE: has_spectral_loc is required by is_valid.  Only a column that carries
+        # spectral units is strong enough evidence to outrank other catalog importers,
+        # since column-name matches are common in generic catalogs.
+        if self.spectral_loc_has_unit and self._has_selected_col('linename'):
+            return 1
+        return -1
 
     def _guess_spectral_loc_col(self):
         """
@@ -112,7 +130,9 @@ class SpectralLinesImporter(BaseCatalogImporter):
         followed by ``'---'`` (no selection) and then the remaining columns.
         If no match is found, ``'---'`` is the first item.
         """
-        tab = self.input
+        tab = self.input_as_table
+        if not isinstance(tab, (Table, QTable)):
+            return ['---']
         colnames = tab.colnames
 
         idx = self._guess_col_by_unit_physical_type(tab, colnames, _SPECTRAL_PHYSICAL_TYPES)
@@ -131,7 +151,9 @@ class SpectralLinesImporter(BaseCatalogImporter):
         If no match is found, ``'---'`` is the first item, which will result in
         the index of the column being used as the line name.
         """
-        input_table = self.input
+        input_table = self.input_as_table
+        if not isinstance(input_table, (Table, QTable)):
+            return ['---']
         colnames = input_table.colnames
 
         for pattern in _LINENAME_PATTERNS:
@@ -151,7 +173,7 @@ class SpectralLinesImporter(BaseCatalogImporter):
         label = item.get('label') if isinstance(item, dict) else item
         if label == '---':
             return True
-        input_table = self.input
+        input_table = self.input_as_table
         if not isinstance(input_table, (Table, QTable)):
             return True
         if label not in input_table.colnames:
@@ -192,7 +214,7 @@ class SpectralLinesImporter(BaseCatalogImporter):
             )
             return
 
-        input_table = self.input
+        input_table = self.input_as_table
         if not isinstance(input_table, (Table, QTable)):
             return
 
@@ -209,18 +231,20 @@ class SpectralLinesImporter(BaseCatalogImporter):
     @property
     def user_api(self):
         expose = ['spectral_loc', 'spectral_loc_unit', 'col_other']
+        if self.input_has_extensions:
+            expose += ['extension']
         return ImporterUserApi(self, expose=expose)
 
     @staticmethod
     def _get_supported_viewers():
         return [
-            {'label': 'Table', 'reference': 'table-viewer'}
+            {'label': 'Spectral Line Table', 'reference': 'spectral-line-table-viewer'}
         ]
 
     @property
     def output_cols(self):
         """Ordered list of column names that will appear in ``output``."""
-        input_table = self.input
+        input_table = self.input_as_table
         if not isinstance(input_table, (Table, QTable)):
             return []
 
@@ -237,7 +261,7 @@ class SpectralLinesImporter(BaseCatalogImporter):
         """
         Build the output ``QTable`` to add to the data collection.
         """
-        input_table = self.input
+        input_table = self.input_as_table
         if not isinstance(input_table, (Table, QTable)):
             return None
 

@@ -1,8 +1,8 @@
 <template>
   <div :style="'display: flex; flex-direction: column; min-width: 0; width: 100%;' + (fontSize ? ' font-size: ' + fontSize + ';' : '')">
-    <span v-if="isEditing && apiHintRename && showApiHint" class="api-hint" style="display: block; margin-bottom: 8px;">
+    <j-api-hint v-if="isEditing && apiHintRename && showApiHint" style="display: block; margin-bottom: 8px;">
       {{ apiHintRename }}('{{ value }}', '{{ editValue }}')
-    </span>
+    </j-api-hint>
     <span @click="onRootClick" @mousedown="onRootMousedown" @keydown.stop style="display: inline-flex; align-items: center; min-width: 0; flex: 1; width: 100%;">
       <!-- Display mode -->
       <span
@@ -21,16 +21,20 @@
         </span>
 
         <!-- Pencil icon - visible on hover in display mode, fixed to the right -->
-        <v-icon
+        <v-btn
+          variant="text"
           v-if="showPencil"
-          small
-          style="margin-left: auto; cursor: pointer; flex-shrink: 0; visibility: hidden;"
+          icon
+          size="small"
+          density="default"
+          aria-label="Rename layer"
+          style="margin-left: auto; flex-shrink: 0; visibility: hidden;"
           :style="hovering ? 'visibility: visible;' : ''"
           @click.stop="startEditing"
           @mousedown.stop
         >
-          mdi-pencil
-        </v-icon>
+          <v-icon>mdi-pencil</v-icon>
+        </v-btn>
       </span>
 
       <!-- Edit mode: shows text field with cancel and confirm buttons -->

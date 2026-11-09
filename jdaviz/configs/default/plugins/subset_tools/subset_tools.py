@@ -204,6 +204,9 @@ class SubsetTools(PluginTemplateMixin, LoadersMixin):
         self.recenter_dataset = DatasetSelect(self, 'recenter_dataset_items',
                                               'recenter_dataset_selected',
                                               multiselect=None)
+        # catalogs loaded through the catalog loaders are not images/cubes and
+        # cannot be used for recentering subsets
+        self.recenter_dataset.add_filter('not_catalog')
 
         self.combination_mode = SelectPluginComponent(self,
                                                       items='combination_mode_items',
@@ -229,8 +232,7 @@ class SubsetTools(PluginTemplateMixin, LoadersMixin):
         return PluginUserApi(self, expose)
 
     def get_regions(self, region_type=None, list_of_subset_labels=None,
-                    use_display_units=False, return_sky_region=None,
-                    wrt_data=None):
+                    use_display_units=False, wrt_data=None):
         """
         Return spatial and/or spectral subsets of ``region_type`` (spatial or
         spectral, default both) as ``regions`` or ``SpectralRegions`` objects,
@@ -241,8 +243,9 @@ class SubsetTools(PluginTemplateMixin, LoadersMixin):
         region_type : str or None, optional
             Specifies the type of subsets to retrieve. Options are ``spatial``
             to retrieve only spatial subsets, ``spectral`` to retrieve only
-            spectral subsets or ``None`` (default) to retrieve both spatial
-            and spectral subsets, when relevant to the current configuration.
+            spectral subsets, ``other`` to retrieve only non-spatial, non-spectral
+            subsets (e.g., from scatter viewers), or ``None`` (default) to retrieve
+            all types of subsets, when relevant to the current configuration.
 
         list_of_subset_labels : list of str or None, optional
             If specified, only subsets matching these labels will be included.
@@ -256,13 +259,13 @@ class SubsetTools(PluginTemplateMixin, LoadersMixin):
 
         wrt_data : str  or None
             Only applicable for spatial subsets, an error will be raised when ''region_type''
-            equals 'spectral'. Otherwise, spectral subsets will not be impacted when called.
-            Controls return type of ``PixelRegion`` / ``SkyRegion``. To return a spatial
-            subset in opposition with the current link type (e.g return ``PixelRegion``
-            when WCS linked, ``SkyRegion`` when pixel linked), ``wrt_data`` can be set to
-            the data label of the dataset whose WCS should be used for this transformation.
-            The default behavior (None) will return Pixel/Sky region based on app link type
-            (Sky for Cubeviz), using the WCS of the subset's parent dataset (i.e the data
+            equals 'spectral' or 'other'. Otherwise, spectral and other subsets will not
+            be impacted when called. Controls return type of ``PixelRegion`` / ``SkyRegion``.
+            To return a spatial subset in opposition with the current link type (e.g return
+            ``PixelRegion`` when WCS linked, ``SkyRegion`` when pixel linked), ``wrt_data`` can
+            be set to the data label of the dataset whose WCS should be used for this
+            transformation. The default behavior (None) will return Pixel/Sky region based on app
+            link type (Sky for Cubeviz), using the WCS of the subset's parent dataset (i.e the data
             layer the subset was created on).
 
         Returns
@@ -309,8 +312,9 @@ class SubsetTools(PluginTemplateMixin, LoadersMixin):
 
         if region_type is not None:
             region_type = region_type.lower()
-            if region_type not in ['spectral', 'spatial']:
-                raise ValueError("`region_type` must be 'spectral', 'spatial', or None for any.")
+            if region_type not in ['spectral', 'spatial', 'other']:
+                raise ValueError("`region_type` must be 'spectral', 'spatial', 'other',"
+                                 " or None for any.")
             elif region_type == 'spectral' and wrt_data:
                 raise ValueError('Unable to retrieve SkyRegion objects for spectral subsets')
             if ((self.config == 'imviz' and region_type == 'spectral') or
@@ -320,7 +324,7 @@ class SubsetTools(PluginTemplateMixin, LoadersMixin):
 
         else:  # determine subset return type(s) by config, if not specified
             region_type = {'imviz': ['spatial'],
-                           'specviz': ['spectral']}.get(self.config, ['spatial', 'spectral'])
+                           'specviz': ['spectral']}.get(self.config, None)
 
         if isinstance(wrt_data, str) and wrt_data not in self.data_collection:
             raise ValueError(f'{wrt_data} is not data in {self.data_collection}')
@@ -331,17 +335,6 @@ class SubsetTools(PluginTemplateMixin, LoadersMixin):
             reg_type = 'sky_region'
         else:
             reg_type = 'region'
-
-        # TODO: remove after deprecation period
-        # Temporarily allow return_sky_region to function as before if wrt_data
-        # is not set.
-        if return_sky_region is not None and wrt_data:
-            raise ValueError('return_sky_region no longer used, use wrt_data instead')
-        elif return_sky_region is not None:
-            wrt_data = self._app.data_collection[0].label
-            warnings.warn(f'return_sky_region no longer used, use wrt_data instead. '
-                          f'Defaulting to {wrt_data} for the wrt_data kwarg')
-            reg_type = 'sky_region' if return_sky_region else 'region'
 
         # first get ALL subsets of specified spatial/spectral type(s)
         subsets = self._app.get_subsets(spectral_only=region_type == ['spectral'],
@@ -361,8 +354,17 @@ class SubsetTools(PluginTemplateMixin, LoadersMixin):
                 if isinstance(ss, SpectralRegion):
                     regions[subset_label] = ss
                 else:
-                    reg = _chain_regions([x[reg_type] for x in ss],
-                                         [x['glue_state'] for x in ss])
+                    # TODO: Consider making this more specific or a case in the next level up
+                    if (region_type is None or 'other' in region_type) and ss[0][reg_type] is None:
+                        # This happens for a scatter viewer subset when an image with WCS
+                        # is loaded in another viewer, since reg_type will be sky_region
+                        reg = _chain_regions([x['region'] for x in ss],
+                                             [x['glue_state'] for x in ss])
+                    else:
+                        # Handle the real spatial subset case
+                        reg = _chain_regions([x[reg_type] for x in ss],
+                                             [x['glue_state'] for x in ss])
+
                     if reg is None:
                         failed_regs.add(subset_label)
                     else:
@@ -524,6 +526,10 @@ class SubsetTools(PluginTemplateMixin, LoadersMixin):
                     "value": subset_state.xatt.parent.label,
                     "orig": subset_state.xatt.parent.label})
 
+                # TODO: "pixels" doesnt apply to scatter plots until units for
+                # scatter viewers are implemented. Only append it for image-like data
+                pixel_suffix = " (pixels)" if len(subset_state.xatt.parent.shape) == 2 else ""
+
                 sky_region = spec['sky_region']
                 if self.display_sky_coordinates and (sky_region is not None):
                     subset_definition += utils._sky_region_to_subset_def(sky_region)
@@ -533,11 +539,11 @@ class SubsetTools(PluginTemplateMixin, LoadersMixin):
                         x, y = subset_state.roi.center()
                         r = subset_state.roi.radius
                         subset_definition += [
-                            {"name": "X Center (pixels)", "att": "xc",
+                            {"name": f"X Center{pixel_suffix}", "att": "xc",
                              "value": x, "orig": x},
-                            {"name": "Y Center (pixels)", "att": "yc",
+                            {"name": f"Y Center{pixel_suffix}", "att": "yc",
                              "value": y, "orig": y},
-                            {"name": "Radius (pixels)", "att": "radius",
+                            {"name": f"Radius{pixel_suffix}", "att": "radius",
                              "value": r, "orig": r}]
 
                     elif isinstance(subset_state.roi, RectangularROI):
@@ -545,7 +551,7 @@ class SubsetTools(PluginTemplateMixin, LoadersMixin):
                             real_att = att.lower()
                             val = getattr(subset_state.roi, real_att)
                             subset_definition.append(
-                                {"name": att + " (pixels)", "att": real_att,
+                                {"name": att + pixel_suffix, "att": real_att,
                                  "value": val, "orig": val})
 
                         theta = np.around(np.degrees(subset_state.roi.theta),
@@ -561,13 +567,13 @@ class SubsetTools(PluginTemplateMixin, LoadersMixin):
                                           decimals=_around_decimals)
 
                         subset_definition += [
-                            {"name": "X Center (pixels)", "att": "xc",
+                            {"name": f"X Center{pixel_suffix}", "att": "xc",
                              "value": xc, "orig": xc},
-                            {"name": "Y Center (pixels)", "att": "yc",
+                            {"name": f"Y Center{pixel_suffix}", "att": "yc",
                              "value": yc, "orig": yc},
-                            {"name": "X Radius (pixels)", "att": "radius_x",
+                            {"name": f"X Radius{pixel_suffix}", "att": "radius_x",
                              "value": rx, "orig": rx},
-                            {"name": "Y Radius (pixels)", "att": "radius_y",
+                            {"name": f"Y Radius{pixel_suffix}", "att": "radius_y",
                              "value": ry, "orig": ry},
                             {"name": "Angle", "att": "theta",
                              "value": theta, "orig": theta}]
@@ -576,14 +582,14 @@ class SubsetTools(PluginTemplateMixin, LoadersMixin):
                         xc, yc = subset_state.roi.center()
                         inner_r = subset_state.roi.inner_radius
                         outer_r = subset_state.roi.outer_radius
-                        subset_definition += [{"name": "X Center (pixels)",
+                        subset_definition += [{"name": f"X Center{pixel_suffix}",
                                                "att": "xc", "value": xc, "orig": xc},
-                                              {"name": "Y Center (pixels)",
+                                              {"name": f"Y Center{pixel_suffix}",
                                                "att": "yc", "value": yc, "orig": yc},
-                                              {"name": "Inner Radius (pixels)",
+                                              {"name": f"Inner Radius{pixel_suffix}",
                                                "att": "inner_radius",
                                                "value": inner_r, "orig": inner_r},
-                                              {"name": "Outer Radius (pixels)",
+                                              {"name": f"Outer Radius{pixel_suffix}",
                                                "att": "outer_radius",
                                                "value": outer_r, "orig": outer_r}]
 

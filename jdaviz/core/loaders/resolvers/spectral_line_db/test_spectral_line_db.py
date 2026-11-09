@@ -2,6 +2,11 @@ import pytest
 from astropy.table import QTable
 
 
+@pytest.fixture(autouse=True)
+def enable_spectral_lines_dev_flag(deconfigged_helper):
+    deconfigged_helper._app.state.dev_spectral_lines = True
+
+
 def test_db_loads(deconfigged_helper):
     """DB should load successfully on init and resolver should be valid."""
     ldr = deconfigged_helper.loaders["spectral line database"]
@@ -335,7 +340,7 @@ def test_load_staged_lines_end_to_end(deconfigged_helper):
 
     # the Spectral Lines importer is the default format, and the linename and
     # spectral location columns from parse_input are auto-detected
-    assert ldr.format.selected == "Spectral Lines"
+    assert ldr.format == "Spectral Lines"
     importer = ldr.importer
     assert importer.spectral_loc.selected == "rest wavelength"
     assert importer._obj.linename_selected == "linename"
@@ -360,5 +365,5 @@ def test_load_staged_lines_end_to_end(deconfigged_helper):
     assert loaded_names == {r["line_name"] for r in ldr.staged_lines}
 
     # data is displayed in a table viewer
-    tv = deconfigged_helper.viewers["Table"]
+    tv = deconfigged_helper.viewers["Spectral Line Table"]
     assert len(tv._obj.glue_viewer.layers) == 1

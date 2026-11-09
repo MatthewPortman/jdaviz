@@ -8,10 +8,9 @@ from traitlets import Any, Bool, List, Unicode, observe
 
 from jdaviz.core.events import NewViewerMessage
 from jdaviz.core.registries import loader_importer_registry, viewer_registry
+from jdaviz.core.loaders.resolvers import find_matching_resolver
 from jdaviz.core.loaders.importers import BaseImporterToDataCollection
-from jdaviz.core.template_mixin import (LoaderBannerMessagesMixin,
-                                        ViewerSelectCreateNew,
-                                        with_spinner)
+from jdaviz.core.template_mixin import ViewerSelectCreateNew, with_spinner
 from jdaviz.core.user_api import ImporterUserApi
 
 
@@ -44,11 +43,13 @@ _MOS_PRODUCTS = {
               'viewer_reference': 'imviz-image-viewer',
               'viewer_traitlet_prefix': 'viewer_image'},
     'catalog': {'pattern': _CAT_PATTERN,
-                'format': 'Catalog',
-                'viewer_label': 'Table',
-                'viewer_reference': 'table-viewer',
+                'format': 'Source Catalog',
+                'viewer_label': 'Source Catalog Table',
+                'viewer_reference': 'source-catalog-table-viewer',
                 'viewer_traitlet_prefix': 'viewer_catalog'},
 }
+
+_MAX_DEPTH = 3
 
 
 def _iter_input_files(dir_path):
@@ -67,9 +68,20 @@ def _iter_input_files(dir_path):
                 return product_type
         return None
 
-    for path in sorted(dir_path.rglob('*')):
-        if not path.name.startswith('.') and path.is_file():
-            yield path, _product_type(path.name)
+    def _walk(directory, depth):
+        for path in sorted(directory.iterdir()):
+            # skip symlinks to mimic rglob
+            if path.is_dir() and not path.is_symlink():
+                if depth < _MAX_DEPTH:
+                    yield from _walk(path, depth + 1)
+            # skip hidden files and directories
+            elif not path.name.startswith('.') and path.is_file():
+                yield path
+
+    count = 0
+    for path in _walk(dir_path, 1):
+        yield path, _product_type(path.name)
+        count += 1
 
 
 def _check_header(path):
@@ -98,7 +110,7 @@ def _check_header(path):
 
 
 @loader_importer_registry('MOS')
-class MOSImporter(BaseImporterToDataCollection, LoaderBannerMessagesMixin):
+class MOSImporter(BaseImporterToDataCollection):
     template_file = __file__, "./mos.vue"
     parser_preference = ['fits', 'asdf', 'specutils.Spectrum']
     allow_directory_input = True
@@ -168,8 +180,8 @@ class MOSImporter(BaseImporterToDataCollection, LoaderBannerMessagesMixin):
 
         # every file gets its own data-label, built from a common prefix
         self.data_label_is_prefix = True
+        self.data_label_suffices = [f"_{f['suffix']}" for f in self.mos_files]
         self.data_label.default = self.default_data_label_prefix
-        self.data_label_suffices = [f['suffix'] for f in self.mos_files]
 
     def _init_product_viewer(self, product_type):
         """
@@ -289,7 +301,7 @@ class MOSImporter(BaseImporterToDataCollection, LoaderBannerMessagesMixin):
         be interpreted as a filesystem path.
         """
         try:
-            return Path(self.input).expanduser()
+            return Path(self.input).expanduser().resolve()
         except (TypeError, ValueError, RuntimeError):
             return None
 
@@ -385,7 +397,7 @@ class MOSImporter(BaseImporterToDataCollection, LoaderBannerMessagesMixin):
         if len(failures):
             self._loader_message(f"{len(failures)} of {n_files} files could not be imported "
                                  f"({', '.join(failures)}).",
-                                 color='warning', popup=True)
+                                 color='warning', history=True, popup=True)
         else:
             self._loader_message(f"{n_files} files imported.", color='success')
 
@@ -442,15 +454,25 @@ class MOSImporter(BaseImporterToDataCollection, LoaderBannerMessagesMixin):
             if self.auto_extract_2d:
                 kwargs['ext_viewer'] = viewers_by_product_type.get('spectrum1d', [])
 
+        importer = None
         try:
-            self._app._jdaviz_helper.load(
+            # Use find_matching_resolver to get the correct resolver for the file,
+            resolver = find_matching_resolver(
+                self._app,
                 str(file_info['path']),
-                loader='file',
-                format=file_info['format'],
-                data_label=data_label,
-                viewer=viewers_by_product_type[product_type],
-                ignore_invalid_kwargs=True,
-                **kwargs)
+                resolver='file',
+                format=file_info['format'])
+
+            # access the importer directly so that its banner messages can be collected
+            importer = resolver.importer._obj
+
+            # Apply any other kwargs (similar to using .load() with kwargs)
+            importer._apply_kwargs({
+                'data_label': data_label,
+                'viewer': viewers_by_product_type[product_type],
+                **kwargs})
+            resolver.load()
+
         except Exception as e:  # nosec
             failures.append(filename)
             self._loader_message(f"Failed to import '{filename}': {e}",
@@ -458,6 +480,11 @@ class MOSImporter(BaseImporterToDataCollection, LoaderBannerMessagesMixin):
         else:
             for viewer_label in viewers_by_product_type[product_type]:
                 imported_labels[viewer_label].append(data_label)
+        finally:
+            if importer is not None:
+                self.loader_message_items = self.loader_message_items + [
+                    {**m, 'text': f"{filename}: {m['text']}"}
+                    for m in importer.loader_message_items]
 
     @with_spinner('import_spinner')
     def __call__(self):
@@ -500,23 +527,11 @@ class MOSImporter(BaseImporterToDataCollection, LoaderBannerMessagesMixin):
         batched = [file_info for file_info in self.mos_files if not _defer(file_info)]
         deferred = [file_info for file_info in self.mos_files if _defer(file_info)]
 
-        # TODO: we artificially suppress snackbars here to avoid overwhelming the user
-        #  with a popup for every file, but we should implement a less hacky
-        #  solution as follow-up effort
-        original_queue = self._app.state.snackbar_queue
-
-        class NoPopupQueue:
-            """Wrapper to suppress snackbar UI popups while preserving logger history."""
-            def __init__(self, wrapped_queue):
-                self.wrapped_queue = wrapped_queue
-
-            def put(self, app_state, logger_plugin, snackbar_msg, **kwargs):
-                # Suppress UI popup by overriding the popup kwarg
-                kwargs['popup'] = False
-                return self.wrapped_queue.put(app_state, logger_plugin, snackbar_msg, **kwargs)
-
-        self._app.state.snackbar_queue = NoPopupQueue(original_queue)
-
+        # avoid overwhelming the user with popups from every file. Messages are still logged
+        # to the history and the individual importers' banners are collected in this banner.
+        snackbar_queue = self._app.state.snackbar_queue
+        suppress_popups = snackbar_queue.suppress_popups
+        snackbar_queue.suppress_popups = True
         try:
             with self._app._jdaviz_helper.batch_load():
                 for file_info in batched:
@@ -527,8 +542,8 @@ class MOSImporter(BaseImporterToDataCollection, LoaderBannerMessagesMixin):
                 self._import_file(file_info, viewers_by_product_type, data_label_prefix,
                                   failures, imported_labels)
 
+            self._show_single_layer_per_viewer(preexisting_labels, imported_labels)
         finally:
-            self._app.state.snackbar_queue = original_queue
+            snackbar_queue.suppress_popups = suppress_popups
 
-        self._show_single_layer_per_viewer(preexisting_labels, imported_labels)
         self._report_import_summary(failures)

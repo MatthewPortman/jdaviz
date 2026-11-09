@@ -51,6 +51,7 @@
     <v-form v-model="formValidModelComponent">
       <j-flex-row v-if="model_comp_items">
         <v-select
+          variant="underlined"
           attach
           :items="model_comp_items.map(i => i.label)"
           v-model="model_comp_selected"
@@ -63,6 +64,7 @@
 
       <j-flex-row v-if="display_order">
         <v-text-field
+          variant="underlined"
           type="number"
           v-model.number="poly_order"
           :label="api_hints_enabled ? 'plg.poly_order' : 'Order'"
@@ -224,6 +226,7 @@
                   class="py-0 my-0 vuetify2">
                   <v-col class="py-my-0">
                     <v-text-field
+                      variant="underlined"
                       density="compact"
                       v-model="param.value"
                     >
@@ -264,6 +267,7 @@
       </j-flex-row>
       <j-flex-row v-if="fitter_items">
         <v-select
+          variant="underlined"
           attach
           :items="fitter_items.map(i => i.label)"
           v-model="fitter_selected"
@@ -287,16 +291,21 @@
               <div v-for="item in fitter_parameters.parameters">
                 <v-switch v-if="isBoolean(item.value)"
                   v-model="item.value"
+                  color="primary"
                   :hint="parameter_hints[item.name]"
                   persistent-hint>
                     <template v-slot:label>
-                        <span :style="api_hints_enabled ? 'overflow-wrap: anywhere; font-size: 8pt' : 'overflow-wrap: anywhere; font-size: 12pt'"
-                              :class="api_hints_enabled ? 'api-hint' : 'font-weight-bold'">
-                          {{ api_hints_enabled ? `plg.set_fitter_parameter('${item.name}', ${item.value.toString()[0].toUpperCase() + item.value.toString().slice(1)})` : item.name }}
+                        <j-api-hint v-if="api_hints_enabled" style="overflow-wrap: anywhere; font-size: 8pt">
+                          {{ `plg.set_fitter_parameter('${item.name}', ${item.value.toString()[0].toUpperCase() + item.value.toString().slice(1)})` }}
+                        </j-api-hint>
+                        <span v-else class="font-weight-bold" style="overflow-wrap: anywhere; font-size: 12pt">
+                          {{ item.name }}
                         </span>
                      </template>
                 </v-switch>
-                <v-text-field v-else
+                <v-text-field
+                    variant="underlined"
+                    v-else
                     v-model.number="item.value"
                     type="number"
                     :min="item.name === 'degree' ? 1 : undefined"

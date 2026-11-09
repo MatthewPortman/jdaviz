@@ -589,6 +589,8 @@ class TableRowSelect(CheckableTool, HubListener):
         self.viewer.widget_table.checked = [single]
 
     def is_visible(self):
+        if not getattr(self.viewer.jdaviz_app.state, 'dev_mos_loader', False):
+            return False
         if not hasattr(self.viewer, 'widget_table'):
             return False
         data = getattr(self.viewer.widget_table, 'data', None)
@@ -925,14 +927,15 @@ class TableAddColumn(Tool):
     tool_id = 'jdaviz:table_add_column'
     action_text = 'Add column'
     tool_tip = 'Add a new empty column to the table data'
+    keep_visible_in_focus_mode = True
 
     def activate(self):
         self.viewer.toolbar.override_tools(
             ['jdaviz:table_apply_add_column'],
             'Add Column',
             custom_widgets=[
-                {'type': 'text', 'label': 'Column name', 'selected': ''},
-                {'type': 'text', 'label': 'Fill value (default: nan)', 'selected': ''},
+                {'type': 'text', 'label': 'Column Name', 'selected': ''},
+                {'type': 'text', 'label': 'Value', 'selected': ''},
             ],
         )
 
@@ -950,6 +953,7 @@ class TableApplyAddColumn(Tool):
     tool_id = 'jdaviz:table_apply_add_column'
     action_text = 'Apply add column'
     tool_tip = 'Add a new column with the given name to all table data entries'
+    keep_visible_in_focus_mode = True
 
     def activate(self):
         selected = self.viewer.toolbar.custom_widget_selected
@@ -987,13 +991,19 @@ class TableColumnsVisible(Tool, HubListener):
     tool_id = 'jdaviz:table_columns_visible'
     action_text = 'Visible columns'
     tool_tip = 'Select which columns are visible in the table'
+    keep_visible_in_focus_mode = True
     _override_title = 'Visible Columns'
 
     def _get_components(self):
         data = getattr(getattr(self.viewer, 'widget_table', None), 'data', None)
         if data is None:
             return []
-        return list(data.main_components) + list(data.derived_components)
+        components = list(data.main_components) + list(data.derived_components)
+        if not getattr(self.viewer.jdaviz_app.state, 'dev_mos_loader', False):
+            assoc_columns = set(data.meta.get('_viewer_data_columns') or {})
+            components = [component for component in components
+                          if str(component) not in assoc_columns]
+        return components
 
     def _build_custom_widgets(self):
         components = self._get_components()
@@ -1778,7 +1788,7 @@ class ImageOpacityTool(_BaseTopImageLyrLool):
                 current = float(layer_state.alpha)
             except Exception:  # nosec
                 pass
-        return [{'type': 'slider', 'label': 'Opacity',
+        return [{'type': 'slider',
                  'min': 0.0, 'max': 1.0, 'step': 0.02,
                  'selected': current}]
 

@@ -22,6 +22,9 @@
       :api_hints_enabled="api_hints_enabled"
       hint="Select a dataset to associate as the parent of the new data entry. 'Auto' associates non-science extensions with the matching science extension; 'None' imports the data without any association."
     ></plugin-dataset-select>
+    <div style="margin-top: 4px; margin-left: 4px">
+      <j-external-link :link="'https://jdaviz.readthedocs.io/en/'+vdocs+'/loaders/formats/image.html#data-association-parent-dataset'"></j-external-link>
+    </div>
     <plugin-auto-label
       v-model:value="data_label_value"
       :default="data_label_default"
@@ -102,6 +105,8 @@
       :show_if_single_entry="true"
       hint="Select the viewer to use for the new data entry."
     ></plugin-viewer-create-new>
+
+    <j-loader-banner-messages :items="loader_message_items"></j-loader-banner-messages>
 
     <loader-import-button
       :spinner="import_spinner"

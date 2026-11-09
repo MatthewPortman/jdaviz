@@ -32,7 +32,7 @@ from glue_jupyter.common.toolbar_vuetify import read_icon
 from echo.vue import autoconnect_callbacks_to_vue
 from ipypopout import PopoutButton
 from ipyvuetify import VuetifyTemplate, theme as vuetify_theme
-from ipywidgets import widget_serialization
+from ipywidgets import Layout, widget_serialization
 from traitlets import Dict, Bool, List, Unicode, Any
 from specutils import Spectrum, SpectralRegion
 from specutils.utils.wcs_utils import SpectralGWCS
@@ -40,11 +40,11 @@ from specutils.utils.wcs_utils import SpectralGWCS
 from jdaviz import __version__
 from jdaviz import style_registry
 from jdaviz.core.config import read_configuration, get_configuration
+from jdaviz.core.custom_regions import RangeRegion
 from jdaviz.core.events import (LoadDataMessage, NewViewerMessage, AddDataMessage,
                                 DataRenamedMessage, SnackbarMessage, RemoveDataMessage,
-                                SubsetRenameMessage, AddDataToViewerMessage,
-                                RemoveDataFromViewerMessage, ViewerAddedMessage,
-                                ViewerRemovedMessage, ViewerRenamedMessage, ChangeRefDataMessage,
+                                SubsetRenameMessage, ViewerAddedMessage, ViewerRemovedMessage,
+                                ViewerRenamedMessage, ChangeRefDataMessage,
                                 IconsUpdatedMessage, LayersFinalizedMessage)
 from jdaviz.core.loaders.resolvers.file.file import PresetFileResolver
 from jdaviz.core.loaders.resolvers.object.object import PresetObjectResolver
@@ -55,10 +55,10 @@ from jdaviz.core.registries import (tool_registry, tray_registry,
 from jdaviz.core.tools import ICON_DIR
 from jdaviz.utils import (SnackbarQueue, alpha_index, alpha_index_to_int, data_has_valid_wcs,
                           layer_is_table_data, MultiMaskSubsetState,
-                          _wcs_only_label, CONFIGS_WITH_LOADERS,
-                          _get_celestial_wcs)
+                          _wcs_only_label, _get_celestial_wcs)
 from jdaviz.core.custom_units_and_equivs import SPEC_PHOTON_FLUX_DENSITY_UNITS, enable_spaxel_unit
 from jdaviz.core.unit_conversion_utils import (is_unit_per_solid_angle,
+                                               all_flux_unit_conversion_equivs,
                                                combine_flux_and_angle_units,
                                                flux_unit_conversion,
                                                spectral_unit_conversion,
@@ -124,7 +124,9 @@ class UnitConverterWithSpectral:
         elif (data.meta.get('_importer') == 'ImageImporter' and
               u.Unit(data.get_component(cid).units).physical_type == 'surface brightness'):
             # handle surface brightness units in image-like data
-            return (values * u.Unit(original_units)).to_value(target_units)
+            equivs = all_flux_unit_conversion_equivs(pixar_sr=data.meta.get('_pixel_scale_factor'))
+            return flux_unit_conversion(values, original_units, target_units,
+                                        equivs, with_unit=False)
         elif cid.label in ("flux"):
             try:
                 spec = data.get_object(cls=Spectrum)
@@ -133,9 +135,8 @@ class UnitConverterWithSpectral:
                 spec = Spectrum(flux=data.data * u.Unit(original_units))
             # equivalencies for flux/surface brightness conversions
             viewer_equivs = viewer_flux_conversion_equivalencies(values, spec)
-            return flux_unit_conversion(
-                values, original_units, target_units, viewer_equivs,
-                with_unit=False)
+            return flux_unit_conversion(values, original_units, target_units,
+                                        viewer_equivs, with_unit=False)
         else:  # spectral axis
             return spectral_unit_conversion(values, original_units, target_units)
 
@@ -205,6 +206,7 @@ custom_components = {'j-tooltip': 'components/tooltip.vue',
                      'data-menu-remove': 'components/data_menu_remove.vue',
                      'data-menu-subset-edit': 'components/data_menu_subset_edit.vue',
                      'hover-api-hint': 'components/hover_api_hint.vue',
+                     'j-api-hint': 'components/api_hint_text.vue',
                      'j-rename-text': 'components/j_rename_text.vue'}
 
 # Register pure vue component. This allows us to do recursive component instantiation only in the
@@ -219,7 +221,7 @@ ipyvue.register_component_from_file('g-viewer-tab', "container.vue", __file__)
 vuetify_theme.themes.light.primary = "#00617E"
 vuetify_theme.themes.light.secondary = "#007DA4"
 vuetify_theme.themes.light.error = '#FF5252'
-vuetify_theme.themes.light.info = '#2196F3'
+vuetify_theme.themes.light.info = '#205F76'
 vuetify_theme.themes.light.success = '#4CAF50'
 vuetify_theme.themes.light.warning = '#FFC107'
 vuetify_theme.themes.light.custom_theme_colors = {
@@ -236,7 +238,7 @@ vuetify_theme.themes.light.custom_theme_colors = {
 vuetify_theme.themes.dark.primary = "#53CBFF"
 vuetify_theme.themes.dark.secondary = "#007DA4"
 vuetify_theme.themes.dark.error = '#FF5252'
-vuetify_theme.themes.dark.info = '#2196F3'
+vuetify_theme.themes.dark.info = '#205F76'
 vuetify_theme.themes.dark.success = '#4CAF50'
 vuetify_theme.themes.dark.warning = '#FFC107'
 vuetify_theme.themes.dark.custom_theme_colors = {
@@ -362,15 +364,16 @@ class ApplicationState(State):
     viewer_icons = DictCallbackProperty({}, docstring="Indexed icons (numbers) for viewers across the app")  # noqa
     layer_icons = DictCallbackProperty({}, docstring="Indexed icons (letters) for layers across the app")  # noqa
 
-    dev_loaders = CallbackProperty(
-        False, docstring='Whether to enable developer mode for new loaders infrastructure')
-
-    # PRs to add to changelog when removing dev_mos_loader dev-flag: 4375
-    dev_spectral_lines_plugin = CallbackProperty(
+    # PRs to add to changelog when removing dev_spectral_lines dev-flag:
+    # line list database loader: #4305, #4314, #4319, #4386, #4401
+    # - Add consolidated emission line list and ability to query database in API. [#4314, 4330]
+    # line list plugin: #4375
+    dev_spectral_lines = CallbackProperty(
         False, docstring='Whether to enable developer mode for the Spectral Lines plugin')
     # PRs to add to changelog when removing dev_mos_loader dev-flag: 4357
     dev_mos_loader = CallbackProperty(
         False, docstring='Whether to enable developer mode for the MOS loader')
+
     loader_items = ListCallbackProperty(
         docstring="List of loaders available to the application.")
     loader_selected = CallbackProperty(
@@ -509,14 +512,6 @@ class PrivateApplication(VuetifyTemplate, HubListener):
         #  application-level data collection object
         self.hub.subscribe(self, DataCollectionDeleteMessage,
                            handler=self._on_data_deleted)
-
-        self.hub.subscribe(self, AddDataToViewerMessage,
-                           handler=lambda msg: self.add_data_to_viewer(
-                               msg.viewer_reference, msg.data_label))
-
-        self.hub.subscribe(self, RemoveDataFromViewerMessage,
-                           handler=lambda msg: self.remove_data_from_viewer(
-                               msg.viewer_reference, msg.data_label))
 
         # Subscribe to snackbar messages and tie them to the display of the
         #  message box
@@ -862,7 +857,7 @@ class PrivateApplication(VuetifyTemplate, HubListener):
 
         new_data = self.data_collection[new_data_label]
 
-        if (new_data.meta.get('_importer') in ('ImageImporter', 'CatalogImporter') and
+        if (new_data.meta.get('_importer') in ('ImageImporter', 'SourceCatalogImporter') and
                 'Orientation' in self._jdaviz_helper.plugins):
             # Orientation plugin alreadly listens for messages for added Data and handles linking
             # orientation_plugin._link_image_data()
@@ -944,7 +939,7 @@ class PrivateApplication(VuetifyTemplate, HubListener):
         any components are compatible with already loaded data. If so, link
         them so that they can be displayed on the same profile1D plot.
         """
-        if self.config in CONFIGS_WITH_LOADERS:
+        if self.config != 'mosviz':
             # automatic linking based on component physical types handled by importers
             return
         elif not self.auto_link:
@@ -1348,15 +1343,22 @@ class PrivateApplication(VuetifyTemplate, HubListener):
                 raise ValueError("Unable to find spectral axis units")
         else:
             data = subset_state.att.parent
-            ndim = data.get_component("flux").ndim
-            if ndim == 2:
-                units = u.pix
+            if "Catalog" in data.meta.get('_importer', ''):
+                # TODO: Handle catalog data with units of the x and y axes of the scatter plot
+                units = u.Unit('')
             else:
-                handler, _ = data_translator.get_handler_for(Spectrum)
-                spec = handler.to_object(data)
-                units = spec.spectral_axis.unit
+                ndim = data.get_component("flux").ndim
+                if ndim == 2:
+                    units = u.pix
+                else:
+                    handler, _ = data_translator.get_handler_for(Spectrum)
+                    spec = handler.to_object(data)
+                    units = spec.spectral_axis.unit
 
-        if use_display_units and units != u.pix:
+        if "Catalog" in data.meta.get('_importer', ''):
+            # We use a wrapper around SpectralRegion with a more appropriate name
+            spec_region = RangeRegion(subset_state.lo * units, subset_state.hi * units)
+        elif use_display_units and units not in (u.pix,):
             # converting may result in flipping order (wavelength <-> frequency)
             ret_units = self._get_display_unit('spectral')
             subset_bounds = [(subset_state.lo * units).to(ret_units, u.spectral()),
@@ -1392,9 +1394,12 @@ class PrivateApplication(VuetifyTemplate, HubListener):
         # but want to do so without raising an error (since many subsets could be requested)
         roi_as_sky_region = None
         if wcs is not None:
-            if self.config == 'cubeviz':
-                # the value for wcs returned above will be in 2D dimensions, which is needed
-                # for this translation to work
+            parent_coords = subset_state.attributes[0].parent.coords
+            if (self.config == 'cubeviz'
+                    or getattr(parent_coords, 'world_n_dim', None) == 3):
+                # for subsets defined on a cube, the parent's full WCS cannot be
+                # used for the sky translation, but the value for wcs returned
+                # above is the (2D) celestial WCS, which is what is needed here
                 roi_as_sky_region = roi_subset_state_to_region(subset_state).to_sky(wcs)
             else:
                 roi_as_sky_region = roi_subset_state_to_region(subset_state, to_sky=True)
@@ -2439,6 +2444,11 @@ class PrivateApplication(VuetifyTemplate, HubListener):
             self._viewer_store[new_reference]._reference_id = new_reference
             self.state.viewer_icons[new_reference] = self.state.viewer_icons.pop(old_id)
 
+        viewer_window = self._viewer_store[viewer_item['id']]._viewer_window
+        viewer_window.id = viewer_item['id']
+        viewer_window.reference = viewer_item['reference']
+        viewer_window.name = viewer_item['name']
+
         # update the viewer name attributes on the helper:
         old_viewer_ref_attrs = [
             attr for attr in dir(self._jdaviz_helper)
@@ -2957,10 +2967,11 @@ class PrivateApplication(VuetifyTemplate, HubListener):
             # unless it is used
             color = data.meta.get('_default_color')
             if color is None:
-                # check if this is a catalog/scatter layer and use scatter_color_cycler,
-                # which has brighter colors.
-                is_catalog = data.meta.get('_importer') == 'CatalogImporter'
-                if is_catalog and hasattr(viewer, 'scatter_color_cycler'):
+                # check if this is a source catalog/scatter layer and use
+                # scatter_color_cycler, which has brighter colors for overplotting
+                # on images
+                is_source_catalog = data.meta.get('_importer') == 'SourceCatalogImporter'
+                if is_source_catalog and hasattr(viewer, 'scatter_color_cycler'):
                     color = viewer.scatter_color_cycler()
                 else:
                     color = viewer.color_cycler()
@@ -3075,7 +3086,7 @@ class PrivateApplication(VuetifyTemplate, HubListener):
                 self.hub.broadcast(snackbar_message)
 
         data_to_remove = self.data_collection[data_label]
-        if self.config in CONFIGS_WITH_LOADERS:
+        if self.config != 'mosviz':
             data_needing_relinking = []
             for link in self.data_collection.external_links:
                 if hasattr(link, 'data1') and hasattr(link, 'data2'):
@@ -3094,7 +3105,7 @@ class PrivateApplication(VuetifyTemplate, HubListener):
 
         self.data_collection.remove(data_to_remove)
 
-        if self.config in CONFIGS_WITH_LOADERS:
+        if self.config != 'mosviz':
             for data in data_needing_relinking:
                 self._link_new_data_by_component_type(data.label)
 
@@ -3386,6 +3397,7 @@ class PrivateApplication(VuetifyTemplate, HubListener):
 
         from jdaviz.configs.default.plugins.viewers import JdavizViewerWindow
         viewer_container = JdavizViewerWindow(viewer, app=self, reference=reference, name=name)
+        viewer._viewer_window = viewer_container
 
         return {
             'id': vid,
@@ -3432,11 +3444,21 @@ class PrivateApplication(VuetifyTemplate, HubListener):
 
         viewer = self._application_handler.new_data_viewer(
             msg.cls, data=msg.data, show=False)
+        # Vue template widgets can default to no layout (ipyvue >= 1.13).
+        if viewer.figure_widget.layout is None:
+            viewer.figure_widget.layout = Layout()
         viewer.figure_widget.layout.height = '100%'
 
         linked_by_wcs = self._align_by == 'wcs'
 
-        if hasattr(viewer.state, 'linked_by_wcs'):
+        # NOTE: ``linked_by_wcs`` lives in FreezableBqplotImageViewerState, which is
+        # shared by image, cube, and 2D spectrum viewers. Only image viewers currently
+        # support WCS linking with the Orientation plugin (see link_image_data),
+        # so this flag must only ever be set True for Image viewers, not cube or 2d spectrum
+        # When orientation support is extended to cube viewers, this check should
+        # be widened to include them (and extract the spatial component of the WCS).
+        if (hasattr(viewer.state, 'linked_by_wcs')
+                and viewer.__class__.__name__ == 'ImvizImageView'):
             orientation_plugin = self._jdaviz_helper.plugins.get('Orientation', None)
             if orientation_plugin is not None:
                 linked_by_wcs = orientation_plugin.align_by.selected == 'WCS'
@@ -3485,7 +3507,7 @@ class PrivateApplication(VuetifyTemplate, HubListener):
         self._viewer_store[vid] = viewer
 
         # Add viewer locally
-        if (self.config in CONFIGS_WITH_LOADERS
+        if (self.config != 'mosviz'
                 and len(self.state.stack_items)):
             # add to bottom (eventually will want more control in placement)
             self.state.stack_items[0]['children'].append(new_stack_item)
@@ -3562,6 +3584,8 @@ class PrivateApplication(VuetifyTemplate, HubListener):
                     viewer = self._application_handler.new_data_viewer(
                         viewer_registry.members.get(view['plot'])['cls'],
                         data=None, show=False)
+                    if viewer.figure_widget.layout is None:
+                        viewer.figure_widget.layout = Layout()
                     viewer.figure_widget.layout.height = '100%'
 
                     viewer_item = self._create_viewer_item(
@@ -3607,7 +3631,7 @@ class PrivateApplication(VuetifyTemplate, HubListener):
             self.state.loader_selected = resolver
 
         # registry will be populated at import
-        if self.config in CONFIGS_WITH_LOADERS:
+        if self.config != 'mosviz':
             import jdaviz.core.loaders  # noqa
             # Determine which loaders to disable
             disabled_loaders = self.state.settings.get('disabled_loaders')
@@ -3629,6 +3653,7 @@ class PrivateApplication(VuetifyTemplate, HubListener):
                     'name': name,
                     'label': name,
                     'requires_api_support': loader.requires_api_support,
+                    'required_dev_flags': list(Resolver.required_dev_flags),
                     'widget': "IPY_MODEL_" + loader.model_id,
                     'api_methods': loader.api_methods,
                 })
@@ -3734,6 +3759,7 @@ class PrivateApplication(VuetifyTemplate, HubListener):
             'name': name,
             'label': name,
             'requires_api_support': loader.requires_api_support,
+            'required_dev_flags': list(PresetResolverClass.required_dev_flags),
             'widget': "IPY_MODEL_" + loader.model_id,
             'api_methods': loader.api_methods,
         })

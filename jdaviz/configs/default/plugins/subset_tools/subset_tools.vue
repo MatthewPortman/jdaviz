@@ -15,13 +15,11 @@
       v-model:loader_selected="loader_selected"
       :api_hints_enabled="api_hints_enabled"
       :api_hints_obj="api_hints_obj"
-      style="margin-bottom: 12px"
+      style="margin-bottom: 24px"
     ></plugin-loaders-panel>
 
     <j-flex-row v-if="api_hints_enabled && config === 'imviz'">
-      <span class="api-hint">
-        plg.subset.multiselect = {{ boolToString(multiselect) }}
-      </span>
+      <j-api-hint>plg.subset.multiselect = {{ boolToString(multiselect) }}</j-api-hint>
     </j-flex-row>
     <j-flex-row v-if="config === 'imviz'">
       <div style="width: calc(100% - 32px)">
@@ -64,14 +62,13 @@
       </v-col>
     </v-row>
 
-    <j-flex-row v-if="api_hints_enabled" style="margin-top: -32px">
-      <span class="api-hint">
-        plg.combination_mode = '{{ combination_mode_selected }}'
-      </span>
+    <j-flex-row v-if="api_hints_enabled" style="margin-top: -12px">
+      <j-api-hint>plg.combination_mode = '{{ combination_mode_selected }}'</j-api-hint>
     </j-flex-row>
 
     <!-- Sub-plugin for recentering of spatial subset (Imviz only) -->
-    <j-flex-row v-if="(config=='imviz' || config=='deconfigged') && is_centerable">
+    <j-flex-row v-if="(config=='imviz' || config=='deconfigged') && is_centerable && recenter_dataset_items.length > 0"
+                style="padding-top: 16px">
       <v-expansion-panels accordion v-model="subplugins_opened">
         <v-expansion-panel>
           <v-expansion-panel-title >
@@ -95,11 +92,8 @@
                   @click="recenter_subset"
                   :class="api_hints_enabled ? 'api-hint' : null"
                 >
-                  {{ api_hints_enabled ?
-                    'plg.recenter()'
-                    :
-                    'Recenter'
-                  }}
+                  <j-api-hint v-if="api_hints_enabled">plg.recenter()</j-api-hint>
+                  <template v-else>Recenter</template>
                 </v-btn>
               </j-tooltip>
             </j-flex-row>
@@ -109,7 +103,7 @@
     </j-flex-row>
 
     <!-- Show all subregions of a subset, including Glue state and subset type. -->
-    <div v-for="(region, index) in subset_definitions">
+    <div v-for="(region, index) in subset_definitions" style="padding-top: 16px">
       <j-plugin-section-header style="margin: 0px; margin-left: -12px; text-align: left; font-size: larger; font-weight: bold">
        Subregion {{ index }}</j-plugin-section-header>
       <j-flex-row class="row-no-outside-padding">
@@ -143,6 +137,7 @@
       <div v-for="(item, index2) in region">
         <j-flex-row v-if="item.name === 'Parent' || item.name === 'Masked values'" class="row-no-outside-padding">
           <v-text-field
+            variant="underlined"
             :label="item.name"
             :model-value="item.value"
             style="padding-top: 0px; margin-top: 0px; margin-bottom: 10px;"
@@ -158,6 +153,7 @@
         </j-flex-row>
         <j-flex-row v-else class="row-no-outside-padding">
           <v-text-field
+            variant="underlined"
             :label="api_hints_enabled ? 'plg.update_subset(\'' + subset_selected + '\', subregion=' + index + ', ' + item.att + '=' + item.value + ')' : item.name"
             v-model.number="item.value"
             type="number"
@@ -194,9 +190,6 @@
             }}
           </plugin-action-button>
         </j-tooltip>
-        <v-alert v-if="api_hints_enabled" type="info" density="compact">
-          see individual commands above to update subset properties
-        </v-alert>
         <plugin-action-button
           :disabled="subset_selected === 'Create New'"
           :results_isolated_to_plugin="false"
@@ -204,6 +197,11 @@
         >
           Update
         </plugin-action-button>
+      </j-flex-row>
+      <j-flex-row v-if="api_hints_enabled" justify="end" no-gutters>
+        <v-alert type="info" density="compact">
+          see individual commands above to update subset properties
+        </v-alert>
       </j-flex-row>
   </j-tray-plugin>
 </template>

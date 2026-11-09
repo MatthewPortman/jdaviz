@@ -1,11 +1,10 @@
-import numpy as np
+from astropy.io.fits import HDUList
 from astropy.nddata import StdDevUncertainty
 import astropy.units as u
+import numpy as np
 from specutils import Spectrum
 from traitlets import Bool, List, observe
-import warnings
 
-from jdaviz.core.events import SnackbarMessage
 from jdaviz.core.registries import loader_importer_registry
 from jdaviz.core.loaders.importers import (BaseImporterToDataCollection,
                                            SpectrumInputExtensionsMixin,
@@ -30,7 +29,14 @@ class SpectrumImporter(BaseImporterToDataCollection, SpectrumInputExtensionsMixi
         super().__init__(*args, **kwargs)
 
         # Add filter for unit compatibility
-        def viewer_incompatible_units(viewer):
+        def viewer_compatible_units(viewer):
+            # Just return False right away if this triggered off another importer, otherwise
+            # trying to access self.output will cause a FileIO error due to closing the input
+            # HDUList on cleanup
+            if isinstance(self.input, HDUList) and (self.input._file is not None and
+                                                    self.input._file.closed):
+                return False
+
             viewer_x_unit = getattr(viewer.state, 'x_display_unit', None)
 
             # if the viewer unit is None, its an empty viewer and anything
@@ -50,7 +56,7 @@ class SpectrumImporter(BaseImporterToDataCollection, SpectrumInputExtensionsMixi
                     return False
                 return True
 
-        self.viewer.add_filter(viewer_incompatible_units)
+        self.viewer.add_filter(viewer_compatible_units)
         self.viewer.select_default()
 
         # set default data-label
@@ -94,9 +100,8 @@ class SpectrumImporter(BaseImporterToDataCollection, SpectrumInputExtensionsMixi
             msg_str = (f"The default extension selection ({self.extension.selected}) will be used.\n"  # noqa
                        f"To load additional sources, please specify them via dropdown or "
                        f"as follows:\n'{self.config}.load(filename, extension=[...]).")
-            msg = SnackbarMessage(msg_str, color='warning', sender=self, timeout=10000)
-            self._app.hub.broadcast(msg)
-            warnings.warn(msg_str)
+            # raise_msg here will raise a warnings.warn warning since the color is 'warning'
+            self._loader_message(msg_str, color='warning', timeout=10000, raise_msg=True)
         return applied_kwargs
 
     @property
@@ -136,18 +141,22 @@ class SpectrumImporter(BaseImporterToDataCollection, SpectrumInputExtensionsMixi
                                      and not self.concatenate)
         # data_label_is_prefix is set in SpectrumInputExtensionsMixin,
         # but may be updated after this
+        data_label_suffices = []
         if not hasattr(self, 'extension'):
-            self.data_label.default = self.default_data_label_prefix
+            default_label = self.default_data_label_prefix
         elif self.multiselect and len(self.extension.selected) > 1 and self.concatenate:
-            self.data_label.default = f"{self.default_data_label_prefix}_concat"
+            default_label = f"{self.default_data_label_prefix}_concat"
         elif self.multiselect and len(self.extension.selected) == 1 and len(self.extension.choices) > 1:  # noqa
             item_dict = self.extension.selected_item_list[0]
-            self.data_label.default = f"{self.default_data_label_prefix}_{item_dict['suffix']}"
+            default_label = f"{self.default_data_label_prefix}_{item_dict['suffix']}"
         else:
-            self.data_label.default = self.default_data_label_prefix
             if self.multiselect and len(self.extension.selected) > 1:
-                self.data_label_suffices = [f"_{item_dict['suffix']}" for item_dict in
-                                            self.extension.selected_item_list]
+                data_label_suffices = [f"_{item_dict['suffix']}" for item_dict in
+                                       self.extension.selected_item_list]
+            default_label = self.default_data_label_prefix
+
+        self.data_label_suffices = data_label_suffices
+        self.data_label.default = default_label
 
     @property
     def output(self):
@@ -163,10 +172,10 @@ class SpectrumImporter(BaseImporterToDataCollection, SpectrumInputExtensionsMixi
                     data.uncertainty = None
 
                     # alert user that we have changed their all-nan uncertainty array to None
-                    msg = 'All uncertainties are nonfinite, replacing with uncertainty=None.'
-                    self._app.hub.broadcast(SnackbarMessage(msg,
-                                                            color="warning",
-                                                            sender=self.app))
+                    self._loader_message(
+                        'All uncertainties are nonfinite, replacing with uncertainty=None.',
+                        color="warning"
+                    )
             output.append(data)
 
         if self.concatenate and len(output) > 1:

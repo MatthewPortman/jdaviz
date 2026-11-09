@@ -19,10 +19,10 @@ class TestCatalogConeSearch:
         self.source_names = list(sky_coord_only_source_catalog['source_id'])
 
     def _load_catalog(self, catalog, **load_kwargs):
-        """Load ``catalog`` as a Catalog and return its data collection label."""
-        self.helper.load(catalog, format='Catalog', **load_kwargs)
+        """Load ``catalog`` as a Source Catalog and return its data collection label."""
+        self.helper.load(catalog, format='Source Catalog', **load_kwargs)
         return [d.label for d in self.helper._app.data_collection
-                if d.meta.get('_importer') == 'CatalogImporter'][-1]
+                if d.meta.get('_importer') == 'SourceCatalogImporter'][-1]
 
     def _enter_catalog_mode(self, catalog=None, col_other=None,
                             col_type='sky_coords', name_col=None):
@@ -230,6 +230,9 @@ class TestCatalogConeSearch:
         side_effect = self._fail_from_name(self.source_names, distinct=distinct)
         with patch.object(SkyCoord, 'from_name', side_effect=side_effect):
             coords = self.ldr._get_catalog_skycoords()
+
+        # Force flush loader messages because this is a nonstandard code path.
+        self.ldr._flush_loader_messages()
 
         # every row failed and is kept with its error string
         assert all(sc is None and err for sc, _, err in coords)

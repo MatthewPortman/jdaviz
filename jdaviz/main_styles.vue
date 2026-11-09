@@ -73,6 +73,11 @@ div.output_wrapper {
   width: 5px;
 }
 
+div.splitpanes__pane.container:has(.gl-compat-root) {
+  /* only target glue viewers, which are panes that contain the div class ".gl-compat-root" */
+  width: 100% !important;
+}
+
 .lm_goldenlayout {
   background: #f8f8f8;
 }
@@ -181,7 +186,8 @@ a:active {
   margin-right: 4px;
 }
 
-.jdaviz-nested-toolbar .v-icon, .jdaviz-nested-toolbar img {
+.jdaviz-nested-toolbar .v-icon:not(.custom-toolbar-mode-cancel),
+.jdaviz-nested-toolbar img {
   /* icons from dark to (consistently) light */
   filter: invert(1) saturate(1) brightness(100);
 }
@@ -219,7 +225,8 @@ a:active {
 
 .jdaviz-nested-toolbar .v-btn--active,
 .v-toolbar .v-btn--active,
-.jdaviz-viewer-toolbar .v-btn--active {
+.jdaviz-viewer-toolbar .v-btn--active,
+.v-app-bar .v-btn.active {
   /* active color (orange) */
   background-color: #c75109 !important;
 }
@@ -320,6 +327,7 @@ span.api-hint, span.api-hint-header {
   font-size: 12px;
   letter-spacing: -0.05em !important;
   text-transform: none !important;
+  overflow-wrap: anywhere;
 }
 
 span.api-hint-header {
@@ -353,6 +361,15 @@ span.api-hint-header {
   font-size: 12px !important;
   overflow-wrap: break-word;
   text-transform: none !important;
+  height: auto !important;
+  min-height: var(--v-btn-height);
+  max-width: 100%;
+}
+
+.api-hint.v-btn .v-btn__content {
+  white-space: normal;
+  overflow-wrap: anywhere;
+  text-align: left;
 }
 
 .api-hint-invert-color span {

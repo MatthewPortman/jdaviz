@@ -19,7 +19,6 @@ from jdaviz.core.events import (AddDataMessage,
                                 RedshiftMessage,
                                 GlobalDisplayUnitChanged,
                                 ViewerAddedMessage,
-                                ViewerRemovedMessage,
                                 SnackbarMessage)
 from jdaviz.core.marks import BaseSpectrumVerticalLine, PluginLine
 from jdaviz.core.registries import tray_registry
@@ -139,8 +138,6 @@ class LineAnalysis(PluginTemplateMixin, DatasetSelectMixin, TableMixin,
                            handler=self._on_global_display_unit_changed)
         self.hub.subscribe(self, ViewerAddedMessage,
                            handler=self._on_viewers_changed)
-        self.hub.subscribe(self, ViewerRemovedMessage,
-                           handler=self._on_viewers_changed)
 
         stats = ['Line Flux', 'Equivalent Width', 'Gaussian Sigma Width',
                  'Gaussian FWHM', 'Centroid']
@@ -175,12 +172,18 @@ class LineAnalysis(PluginTemplateMixin, DatasetSelectMixin, TableMixin,
     def user_api(self):
         return PluginUserApi(self, expose=('dataset', 'spectral_subset',
                                            'continuum', 'continuum_width', 'get_results',
-                                           'export_table', 'add_results', 'plot_gaussian_params'))
+                                           'export_table', 'add_results', 'plot_gaussian_params',
+                                           'table', 'clear_table'))
 
     @property
     def line_items(self):
         # Return list of only the table indices ("name_rest" in line table) from line_menu_items
         return [item["value"] for item in self.line_menu_items]
+
+    def _on_viewer_removed(self, msg):
+        # subscription to ViewerRemovedMessage inherited from TemplateMixin
+        super()._on_viewer_removed(msg)
+        self._on_viewers_changed(msg)
 
     def _on_viewers_changed(self, msg):
         # when accessing the selected data, access the spectrum-viewer version
@@ -621,7 +624,7 @@ class LineAnalysis(PluginTemplateMixin, DatasetSelectMixin, TableMixin,
                     flux_unit, return_unit=True)
                 if solid_angle_in_flux_unit is None:
                     # use dimensionless_unscaled as a placeholder unit.
-                    # is_equivalent() checks won't pass anyway if theres no
+                    # is_equivalent() checks won't pass anyway if there's no
                     # solid angle in the unit, so it won't matter what this is
                     solid_angle_in_flux_unit = u.dimensionless_unscaled
 
@@ -677,7 +680,7 @@ class LineAnalysis(PluginTemplateMixin, DatasetSelectMixin, TableMixin,
                         if add_flux:
                             raw_result = analysis.line_flux(wave_spec) * flux_unit
                         else:
-                            raw_result = raw_result = analysis.line_flux(wave_spec)
+                            raw_result = analysis.line_flux(wave_spec)
                     except ValueError as e:
                         # can happen if interpolation out-of-bounds or any error from specutils
                         # let's avoid the whole app crashing and instead expose the error to the
@@ -687,7 +690,7 @@ class LineAnalysis(PluginTemplateMixin, DatasetSelectMixin, TableMixin,
                             color="warning", traceback=e))
                         self.update_results(None)
                         return
-                    # When flux is equivalent to Jy, lineflux result should be shown in W/m2
+                    # When flux is equivalent to Jy, line flux result should be shown in W/m2
                     if flux_unit.is_equivalent(u.W / (u.m * u.m * u.m * solid_angle_in_flux_unit)):
                         final_unit = u.Unit(f'W/(m2 {solid_angle_string})')
                     else:

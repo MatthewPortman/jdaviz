@@ -1,6 +1,31 @@
 <template>
   <v-container>
 
+    <div class="invert-if-dark" style="font-size: 10px; color: rgba(0, 0, 0, 0.6); margin-bottom: 5px;">
+      Load a table of spectral lines (e.g. wavelengths or frequencies and names).
+      For tabular data with source positions, see the "Source Catalog" format.
+      For other generic tabular data, use the "Generic Catalog" format.
+    </div>
+
+    <plugin-select v-if="extension_items.length"
+      :items="extension_items"
+      :exists_in_dc="existing_data_in_dc"
+      v-model:selected="extension_selected"
+      :show_if_single_entry="true"
+      :multiselect="extension_multiselect"
+      :search="extension_items.length > 3"
+      label="Extension"
+      api_hint="ldr.importer.extension ="
+      :api_hints_enabled="api_hints_enabled"
+      hint="Table extension(s) to import. If multiple selected, only columns common to all selected tables will be available for import. If column names differ, it is recommended to load tables individually."
+    ></plugin-select>
+
+    <div v-if="no_common_col_msg !== ''" style="font-size: 10px; color: red; margin-bottom: 5px;">
+      {{ no_common_col_msg }}
+    </div>
+
+    <div v-if="!input_has_extensions || (extension_selected && extension_selected.length > 0 && no_common_col_msg === '')">
+
     <j-plugin-section-header>Definitions</j-plugin-section-header>
 
     <plugin-select
@@ -47,7 +72,7 @@
       v-model:auto="data_label_auto"
       :invalid_msg="data_label_invalid_msg"
       label="Line list label"
-      api_hint="ldr.importer.label ="
+      api_hint="ldr.importer.data_label ="
       :api_hints_enabled="api_hints_enabled"
       hint="Label to assign to the line list in the data collection."
     ></plugin-auto-label>
@@ -70,6 +95,8 @@
       hint="Select the viewer to display the line list in."
     ></plugin-viewer-create-new>
 
+    <j-loader-banner-messages :items="loader_message_items"></j-loader-banner-messages>
+
     <loader-import-button
       :spinner="import_spinner"
       :disabled_msg="import_disabled_msg"
@@ -78,6 +105,8 @@
       :data_label_overwrite="data_label_overwrite"
       @click="import_clicked">
     </loader-import-button>
+
+    </div>
 
   </v-container>
 </template>

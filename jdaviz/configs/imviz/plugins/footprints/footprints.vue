@@ -150,17 +150,15 @@
             @click="() => center_on_viewer(viewer_ref)"
             :class="api_hints_enabled ? 'api-hint' : null"
           >
-            {{ api_hints_enabled ?
-                'plg.center_on_viewer(\''+viewer_ref+'\')'
-                :
-                viewer_ref
-            }}
+            <j-api-hint v-if="api_hints_enabled">plg.center_on_viewer('{{ viewer_ref }}')</j-api-hint>
+            <template v-else>{{ viewer_ref }}</template>
           </v-btn>
           </j-tooltip>
         </j-flex-row>
 
         <j-flex-row>
           <v-text-field
+            variant="underlined"
             v-model.number="ra"
             type="number"
             step="0.01"
@@ -174,6 +172,7 @@
 
         <j-flex-row>
           <v-text-field
+            variant="underlined"
             v-model.number="dec"
             type="number"
             step="0.01"
@@ -187,6 +186,7 @@
 
         <j-flex-row>
           <v-text-field
+            variant="underlined"
             v-model.number="pa"
             type="number"
             :rules="[() => pa!=='' || 'This field is required']"
@@ -200,6 +200,7 @@
 
         <j-flex-row>
           <v-text-field
+            variant="underlined"
             v-model.number="v2_offset"
             type="number"
             :rules="[() => v2_offset!=='' || 'This field is required']"
@@ -213,6 +214,7 @@
 
         <j-flex-row>
           <v-text-field
+            variant="underlined"
             v-model.number="v3_offset"
             type="number"
             :rules="[() => v3_offset!=='' || 'This field is required']"
